@@ -323,6 +323,7 @@ void kmain(void) {
     kprintf("mm: %lu MiB usable, %lu MiB free\n", pmm_total_pages() * PAGE_SIZE >> 20,
             pmm_free_pages() * PAGE_SIZE >> 20);
     vmm_init();
+    platform_console_remap();
     kprintf("mm: running on kernel page tables\n");
     heap_init();
 

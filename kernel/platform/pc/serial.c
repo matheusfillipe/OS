@@ -25,6 +25,8 @@ static bool uart_init(uint16_t port, uint8_t loopback_byte) {
 
 bool platform_console_init(void) { return present = uart_init(COM1, 0xae); }
 
+void platform_console_remap(void) {}
+
 static void serial_putc(char c) {
     for (int spins = 0; spins < 100000 && !(inb(COM1 + 5) & 0x20); spins++)
         ;

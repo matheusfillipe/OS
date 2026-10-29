@@ -5,6 +5,8 @@
 
 /* Boot log sink: the first and most reliable output the kernel has. */
 bool platform_console_init(void);
+/* Moves the console's registers onto the kernel page tables once vmm_init has loaded them. */
+void platform_console_remap(void);
 void platform_console_write(const char *s, uint64_t len);
 void platform_console_rx_init(void (*rx)(char c));
 

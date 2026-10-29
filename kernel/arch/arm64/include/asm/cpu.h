@@ -4,6 +4,9 @@
 /* arm64 part of struct cpu. TPIDR_EL1 holds the struct cpu pointer itself. */
 struct arch_cpu {
     uint64_t kernel_sp; /* stack top for exceptions taken from EL0 */
+    uint64_t mpidr;
+    volatile uint8_t *gicr; /* this CPU's GIC redistributor */
+    uint32_t irq_intid;     /* interrupt being handled, for irq_eoi */
 };
 
 struct cpu;

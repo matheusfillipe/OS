@@ -16,10 +16,6 @@ void idt_init(void);
 void idt_load(void);
 void idt_set_handler(uint8_t vector, irq_handler_t handler);
 
-/* ACPI */
-void acpi_init(void);
-void *acpi_find_table(const char *sig, int index);
-
 /* APIC: local APIC on every CPU, I/O APIC for device interrupts. */
 void apic_init(void);       /* BSP: parse MADT, disable 8259, calibrate timer */
 void lapic_init_cpu(void);  /* every CPU: enable local APIC + periodic timer */

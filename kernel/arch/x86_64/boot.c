@@ -1,4 +1,5 @@
 #include <kernel/arch.h>
+#include <kernel/boot.h>
 #include <kernel/lib.h>
 #include <kernel/proc.h>
 

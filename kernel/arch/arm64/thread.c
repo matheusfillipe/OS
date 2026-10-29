@@ -2,14 +2,15 @@
 #include <kernel/lib.h>
 #include <kernel/proc.h>
 
-void switch_context(uint64_t *save_sp, uint64_t new_sp) {
-    (void)save_sp, (void)new_sp;
-    panic("arm64: context switch is not implemented yet");
-}
+void thread_start(void);
 
+/* Initial frame consumed by switch_context: x19-x29 zero, then x30, which
+ * its ret jumps to. */
 uint64_t arch_thread_initial_sp(uint64_t stack_top) {
-    (void)stack_top;
-    panic("arm64: context switch is not implemented yet");
+    uint64_t *sp = (uint64_t *)stack_top - 12;
+    memset(sp, 0, 12 * 8);
+    sp[11] = (uint64_t)thread_start;
+    return (uint64_t)sp;
 }
 
 void return_to_user(struct regs *frame) {
