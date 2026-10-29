@@ -1,7 +1,10 @@
-#include <kernel/cpu.h>
+#include <asm/io.h>
+#include <kernel/arch.h>
 #include <kernel/drivers.h>
+#include <kernel/platform.h>
 
 #define COM1 0x3f8
+#define VEC_COM1 0x24
 
 static bool present;
 
@@ -34,6 +37,24 @@ void serial_write(const char *s, uint64_t len) {
             serial_putc('\r');
         serial_putc(s[i]);
     }
+}
+
+static void (*rx_callback)(char c);
+
+static void com1_irq(struct regs *r) {
+    (void)r;
+    for (int n = 0; n < 64 && (inb(COM1 + 5) & 1); n++)
+        rx_callback((char)inb(COM1));
+    lapic_eoi();
+}
+
+void serial_rx_irq_init(void (*rx)(char c)) {
+    rx_callback = rx;
+    idt_set_handler(VEC_COM1, com1_irq);
+    bool level, active_low;
+    uint32_t gsi = irq_to_gsi(4, &level, &active_low);
+    ioapic_route(gsi, VEC_COM1, cpus[0]->arch.lapic_id, level, active_low);
+    outb(COM1 + 1, 0x01); /* interrupt on received data */
 }
 
 /* ---- COM2: text from the host (clipboard sharing in VMs) ----

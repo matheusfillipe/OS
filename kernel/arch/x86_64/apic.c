@@ -1,3 +1,4 @@
+#include <asm/io.h>
 #include <kernel/arch.h>
 #include <kernel/boot.h>
 #include <kernel/cpu.h>

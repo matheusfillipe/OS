@@ -7,6 +7,7 @@
 #include <kernel/mm.h>
 #include <kernel/net.h>
 #include <kernel/pci.h>
+#include <kernel/platform.h>
 #include <kernel/proc.h>
 #include <kernel/sched.h>
 #include <kernel/vfs.h>
@@ -288,7 +289,7 @@ static void init_main(void *arg) {
     if (!initrd) {
         kprintf("no initrd module: kernel-only boot\n");
         kprintf("OS BOOT OK\n");
-        outb(QEMU_DEBUG_EXIT_PORT, 0x00); /* QEMU exit code 1 = success in tests */
+        platform_test_exit(0x00); /* QEMU exit code 1 = success in tests */
         return;
     }
     /* The base system first (the Freedesktop Platform and what is built on

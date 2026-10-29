@@ -2,7 +2,7 @@
 #include <kernel/lib.h>
 #include <kernel/pci.h>
 
-#include "bga.h"
+#include <kernel/bga.h>
 
 /* Bochs/QEMU "std VGA" (PCI 1234:1111) mode setting through its dispi
  * registers (index on I/O port 0x1CE, data on 0x1CF). The firmware already

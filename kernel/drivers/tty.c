@@ -3,6 +3,7 @@
 #include <kernel/drivers.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
+#include <kernel/platform.h>
 #include <kernel/proc.h>
 #include <kernel/vfs.h>
 #include <linux/abi.h>
@@ -233,20 +234,10 @@ static const struct vnode_ops devtty_ops = {
     .read = tty_read, .write = tty_write, .ioctl = tty_ioctl, .poll = tty_poll, .open = devtty_open,
 };
 
-/* ---- serial input interrupt ---- */
-
-#define COM1 0x3f8
-#define VEC_COM1 0x24
-
-static void com1_irq(struct regs *r) {
-    (void)r;
-    for (int n = 0; n < 64 && (inb(COM1 + 5) & 1); n++) {
-        char c = (char)inb(COM1);
-        if (c == 0x7f)
-            c = '\b';
-        tty_input(c);
-    }
-    lapic_eoi();
+static void serial_rx(char c) {
+    if (c == 0x7f)
+        c = '\b';
+    tty_input(c);
 }
 
 void tty_init(void) {
@@ -278,11 +269,7 @@ void tty_init(void) {
     vfs_create_node("/dev/tty", v);
     vnode_put(v);
 
-    idt_set_handler(VEC_COM1, com1_irq);
-    bool level, active_low;
-    uint32_t gsi = irq_to_gsi(4, &level, &active_low);
-    ioapic_route(gsi, VEC_COM1, cpus[0]->arch.lapic_id, level, active_low);
-    outb(COM1 + 1, 0x01); /* interrupt on received data */
+    serial_rx_irq_init(serial_rx);
 }
 
 /* ---- the simple character devices ---- */

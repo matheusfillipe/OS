@@ -76,7 +76,3 @@ static inline uint64_t arch_counter(void) {
     __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
     return ((uint64_t)hi << 32) | lo;
 }
-
-/* Writing here makes QEMU exit when started with -device isa-debug-exit;
- * on real hardware and in `make run` the port is unused and this is a no-op. */
-#define QEMU_DEBUG_EXIT_PORT 0xf4

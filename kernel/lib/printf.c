@@ -1,6 +1,7 @@
 #include <kernel/cpu.h>
 #include <kernel/drivers.h>
 #include <kernel/lib.h>
+#include <kernel/platform.h>
 #include <kernel/spinlock.h>
 
 /* Minimal printf: %d %i %u %x %X %p %s %c %%, with optional '0' flag, width,
@@ -174,6 +175,6 @@ void panic(const char *fmt, ...) {
         log_write(line, (size_t)l);
         fp = (uint64_t *)fp[0];
     }
-    outb(QEMU_DEBUG_EXIT_PORT, 0x01); /* QEMU exit code 3 = failure */
+    platform_test_exit(0x01); /* QEMU exit code 3 = failure */
     halt_forever();
 }

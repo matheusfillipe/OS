@@ -1,4 +1,4 @@
-#include <kernel/cpu.h>
+#include <asm/io.h>
 #include <kernel/lib.h>
 
 /* QEMU's fw_cfg interface: lets the test harness pass named values

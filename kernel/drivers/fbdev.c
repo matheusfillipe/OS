@@ -5,7 +5,7 @@
 #include <kernel/proc.h>
 #include <kernel/vfs.h>
 
-#include "bga.h"
+#include <kernel/bga.h>
 
 /* /dev/fb0 with the Linux fbdev interface (FBIOGET_VSCREENINFO,
  * FBIOGET_FSCREENINFO, mmap). The desktop draws into it directly; once a
