@@ -17,8 +17,7 @@ struct cpu {
     struct thread *prev; /* thread we just switched away from */
     uint64_t ticks;
     volatile bool online;
-    struct mm *active_mm;          /* user page tables loaded on this CPU, or NULL */
-    volatile int tlb_flush_pending; /* set by tlb_shootdown, cleared by the flush */
+    struct mm *active_mm; /* user page tables loaded on this CPU, or NULL */
 };
 
 #define MAX_CPUS 256
@@ -32,6 +31,7 @@ void arch_selftest_breakpoint(void);
 
 void switch_context(uint64_t *save_sp, uint64_t new_sp);
 uint64_t arch_thread_initial_sp(uint64_t stack_top);
+/* An arch that derives the exception stack from the saved frame leaves this empty. */
 void arch_set_kernel_stack(struct cpu *c, uint64_t top);
 void arch_load_tls(uint64_t tls);
 void arch_exec_init_regs(struct regs *r, uint64_t entry, uint64_t sp);

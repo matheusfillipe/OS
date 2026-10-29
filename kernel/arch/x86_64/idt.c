@@ -104,7 +104,7 @@ void isr_dispatch(struct regs *r) {
         dump_regs(r);
         panic("unhandled CPU exception");
     }
-    if (r->vector != VEC_SPURIOUS) {
+    if (r->vector != IRQ_SPURIOUS) {
         lapic_eoi();
         kprintf("unexpected interrupt vector %lu on cpu %u\n", r->vector, this_cpu()->id);
     }

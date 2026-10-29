@@ -62,6 +62,13 @@ struct pageobj *pageobj_adopt(uint64_t phys, uint64_t size); /* pinned memory as
 
 #include <asm/pgtable.h>
 
+/* We store the entry for a page or table we just filled, and another CPU's
+ * table walk must not see the entry before the contents. */
+static inline void pte_publish(uint64_t *slot, uint64_t e) {
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    *slot = e;
+}
+
 /* Builds the kernel's own page tables (kernel image with W^X permissions +
  * direct map of physical memory) and switches to them. */
 void vmm_init(void);

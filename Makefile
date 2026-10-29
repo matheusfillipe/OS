@@ -7,8 +7,10 @@ ARCH        ?= x86_64
 LIMINE_DIR  := vendor/limine
 ifeq ($(ARCH),arm64)
 BUILD       := build/arm64
+EFI_BOOT    := BOOTAA64.EFI
 else
 BUILD       := build
+EFI_BOOT    := BOOTX64.EFI
 endif
 ISO         := $(BUILD)/os.iso
 KERNEL      := $(BUILD)/kernel.elf
@@ -34,11 +36,25 @@ QEMU        ?= qemu-system-aarch64
 QEMU_FLAGS  ?= -M virt,gic-version=3 -accel $(if $(filter Darwin,$(shell uname -s)),hvf,kvm) -cpu host -smp 4 -m 2G
 DOCKER_PLATFORM := linux/arm64
 BUILDER     := os-builder-arm64
+FIRMWARE    := $(AAVMF)
+FIRMWARE_VARS := $(AAVMF_VARS)
+VARS_COPY   := $(BUILD)/aavmf_vars.fd
+# UEFI only, booting the kernel without modules.
+ISO_MODULES :=
+RUN_DISK    :=
 else
 QEMU        ?= qemu-system-x86_64
 QEMU_FLAGS  ?= -M q35 -m 2G -smp 4 -cpu max -no-reboot -netdev user,id=n0 -device e1000,netdev=n0
 DOCKER_PLATFORM := linux/amd64
 BUILDER     := os-builder
+FIRMWARE    := $(OVMF)
+FIRMWARE_VARS := $(OVMF_VARS)
+VARS_COPY   := $(BUILD)/ovmf_vars.fd
+ISO_MODULES := initrd base
+RUN_DISK     = $(DISK_IMG)
+LIMINE_BIOS := $(LIMINE_DIR)/limine-bios.sys $(LIMINE_DIR)/limine-bios-cd.bin
+ISO_BIOS_FLAGS := -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table
+BIOS_INSTALL := $(LIMINE_DIR)/limine bios-install
 endif
 # The persistent disk for `make run`: /dev/sda inside the OS, created empty
 # (1 GiB, sparse) on first use. `make clean` keeps it; delete it by hand to
@@ -97,23 +113,13 @@ $(BASE_CPIO): $(shell [ -f $(BASE_DIR)/.stamp ] && echo $(BASE_DIR)/.stamp)
 
 base: $(BASE_CPIO)
 
-ifeq ($(ARCH),arm64)
-# UEFI only, with the kernel alone: there is no arm64 user space.
-iso: kernel $(LIMINE_DIR)
+iso: kernel $(ISO_MODULES) $(LIMINE_DIR)
 	rm -rf $(BUILD)/iso_root
 	mkdir -p $(BUILD)/iso_root/boot/limine $(BUILD)/iso_root/EFI/BOOT
 	cp $(KERNEL) $(BUILD)/iso_root/boot/kernel.elf
+ifeq ($(ISO_MODULES),)
 	sed '/module_path/d' boot/limine.conf > $(BUILD)/iso_root/boot/limine/limine.conf
-	cp $(LIMINE_DIR)/limine-uefi-cd.bin $(BUILD)/iso_root/boot/limine/
-	cp $(LIMINE_DIR)/BOOTAA64.EFI $(BUILD)/iso_root/EFI/BOOT/
-	xorriso -as mkisofs -R -r -J -hfsplus -apm-block-size 2048 --efi-boot boot/limine/limine-uefi-cd.bin \
-		-efi-boot-part --efi-boot-image --protective-msdos-label \
-		$(BUILD)/iso_root -o $(ISO) 2>/dev/null
 else
-iso: kernel initrd base $(LIMINE_DIR)
-	rm -rf $(BUILD)/iso_root
-	mkdir -p $(BUILD)/iso_root/boot/limine $(BUILD)/iso_root/EFI/BOOT
-	cp $(KERNEL) $(BUILD)/iso_root/boot/kernel.elf
 	cp $(INITRD) $(BUILD)/iso_root/boot/initrd.cpio
 	[ ! -s $(BASE_CPIO) ] || cp $(BASE_CPIO) $(BUILD)/iso_root/boot/base.cpio
 	cp boot/limine.conf $(BUILD)/iso_root/boot/limine/
@@ -127,16 +133,15 @@ iso: kernel initrd base $(LIMINE_DIR)
 		printf '    module_path: boot():/boot/files/mind.gguf\n    module_string: /usr/share/os/mind/model.gguf\n' \
 			>> $(BUILD)/iso_root/boot/limine/limine.conf; \
 	fi
-	cp $(LIMINE_DIR)/limine-bios.sys $(LIMINE_DIR)/limine-bios-cd.bin \
+endif
+	cp $(LIMINE_BIOS) \
 	   $(LIMINE_DIR)/limine-uefi-cd.bin $(BUILD)/iso_root/boot/limine/
-	cp $(LIMINE_DIR)/BOOTX64.EFI $(BUILD)/iso_root/EFI/BOOT/
-	xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
-		-no-emul-boot -boot-load-size 4 -boot-info-table -hfsplus \
+	cp $(LIMINE_DIR)/$(EFI_BOOT) $(BUILD)/iso_root/EFI/BOOT/
+	xorriso -as mkisofs -R -r -J $(ISO_BIOS_FLAGS) -hfsplus \
 		-apm-block-size 2048 --efi-boot boot/limine/limine-uefi-cd.bin \
 		-efi-boot-part --efi-boot-image --protective-msdos-label \
 		$(BUILD)/iso_root -o $(ISO) 2>/dev/null
-	$(LIMINE_DIR)/limine bios-install $(ISO) 2>/dev/null
-endif
+	$(if $(BIOS_INSTALL),$(BIOS_INSTALL) $(ISO) 2>/dev/null)
 endif
 
 # On a Windows drive under WSL (/mnt/c) NTFS keeps the file sparse only if
@@ -147,17 +152,10 @@ $(DISK_IMG):
 	-fsutil.exe sparse setflag "$$(wslpath -w $(abspath $@))" >/dev/null 2>&1
 	truncate -s 1G $@
 
-ifeq ($(ARCH),arm64)
-run: iso
-	cp $(AAVMF_VARS) $(BUILD)/aavmf_vars.fd
-	$(QEMU) $(QEMU_FLAGS) -drive if=pflash,format=raw,readonly=on,file=$(AAVMF) \
-		-drive if=pflash,format=raw,file=$(BUILD)/aavmf_vars.fd -cdrom $(ISO) -serial stdio
-else
-run: iso | $(DISK_IMG)
-	cp $(OVMF_VARS) $(BUILD)/ovmf_vars.fd
-	$(QEMU) $(QEMU_FLAGS) -drive if=pflash,format=raw,readonly=on,file=$(OVMF) \
-		-drive if=pflash,format=raw,file=$(BUILD)/ovmf_vars.fd $(DISK_FLAGS) -cdrom $(ISO) -serial stdio
-endif
+run: iso | $(RUN_DISK)
+	cp $(FIRMWARE_VARS) $(VARS_COPY)
+	$(QEMU) $(QEMU_FLAGS) -drive if=pflash,format=raw,readonly=on,file=$(FIRMWARE) \
+		-drive if=pflash,format=raw,file=$(VARS_COPY) $(if $(RUN_DISK),$(DISK_FLAGS)) -cdrom $(ISO) -serial stdio
 
 run-bios: iso | $(DISK_IMG)
 	$(QEMU) $(QEMU_FLAGS) $(DISK_FLAGS) -cdrom $(ISO) -serial stdio

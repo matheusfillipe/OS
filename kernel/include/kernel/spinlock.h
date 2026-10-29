@@ -8,20 +8,10 @@ typedef struct {
 
 #define SPINLOCK_INIT {0}
 
-/* A CPU spinning here usually has interrupts off, so it cannot take a TLB
- * shootdown IPI, while the CPU that sent the IPI waits for the answer and may
- * hold (or wait behind a holder of) the lock we want. To keep that from
- * deadlocking, spinners answer pending shootdowns themselves (smp.c). */
-extern volatile int tlb_shootdowns_active;
-void tlb_service(void);
-
 static inline void spin_lock(spinlock_t *l) {
     while (__atomic_exchange_n(&l->locked, 1, __ATOMIC_ACQUIRE))
-        while (__atomic_load_n(&l->locked, __ATOMIC_RELAXED)) {
-            cpu_relax();
-            if (__atomic_load_n(&tlb_shootdowns_active, __ATOMIC_RELAXED))
-                tlb_service();
-        }
+        while (__atomic_load_n(&l->locked, __ATOMIC_RELAXED))
+            arch_spin_wait();
 }
 
 static inline void spin_unlock(spinlock_t *l) { __atomic_store_n(&l->locked, 0, __ATOMIC_RELEASE); }

@@ -1,5 +1,6 @@
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <kernel/mm.h>
 
@@ -26,9 +27,13 @@
 #define MAIR_DEVICE_ATTR 0x04 /* Device-nGnRE */
 #define MAIR_VALUE  (0xffULL | 0x44ULL << 8 | (uint64_t)MAIR_DEVICE_ATTR << 16)
 
-/* The kernel lives in TTBR1 and user space in TTBR0, so a user root shares
- * nothing with the kernel's. */
+/* The kernel lives in TTBR1 and user space in TTBR0, so user space owns the
+ * whole of its root. */
 #define USER_PGD_ENTRIES 512
+
+/* Firmware-reserved ranges hold device registers, which need Device
+ * attributes, so vmm_map_mmio maps them when a driver asks. */
+#define DIRECT_MAP_RESERVED false
 
 #define KERNEL_VIRT_BASE 0xffff000000000000ULL
 
@@ -89,5 +94,8 @@ static inline void arch_tlb_flush_page(uint64_t va) {
     __asm__ volatile("dsb ishst; tlbi vaae1is, %0; dsb ish; isb" ::"r"((va >> 12) & 0xfffffffffffULL) : "memory");
 }
 static inline void arch_tlb_flush_all(void) { __asm__ volatile("dsb ishst; tlbi vmalle1is; dsb ish; isb" ::: "memory"); }
+/* We use a new kernel mapping right away, so the table walker has to see the descriptor before our next access. */
+static inline void arch_kernel_map_sync(void) { __asm__ volatile("dsb ishst; isb" ::: "memory"); }
+void arch_sync_icache(void *kva, size_t len);
 void arch_load_root(uint64_t phys);
 uint64_t arch_current_root(void);

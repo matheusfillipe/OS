@@ -166,8 +166,8 @@ static void mouse_byte(uint8_t b) {
 
 /* ---- i8042 controller ---- */
 
-#define VEC_KBD 0x25
-#define VEC_MOUSE 0x26
+#define IRQ_KBD 0x25
+#define IRQ_MOUSE 0x26
 
 static void i8042_wait_write(void) {
     for (int i = 0; i < 100000 && (inb(0x64) & 2); i++)
@@ -231,9 +231,9 @@ void platform_input_init(void) {
     mouse_write(0xf6); /* defaults */
     mouse_write(0xf4); /* streaming on */
 
-    idt_set_handler(VEC_KBD, i8042_irq);
-    idt_set_handler(VEC_MOUSE, i8042_irq);
-    isa_irq_route(1, VEC_KBD);
-    isa_irq_route(12, VEC_MOUSE);
+    idt_set_handler(IRQ_KBD, i8042_irq);
+    idt_set_handler(IRQ_MOUSE, i8042_irq);
+    isa_irq_route(1, IRQ_KBD);
+    isa_irq_route(12, IRQ_MOUSE);
     kprintf("input: PS/2 keyboard, %s mouse\n", vmmouse ? "absolute (vmmouse)" : "PS/2");
 }

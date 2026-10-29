@@ -29,6 +29,7 @@ struct arch_cpu {
     uint64_t gdt[7];
     struct tss tss;
     uint8_t *df_stack;
+    volatile int tlb_flush_pending; /* set by tlb_shootdown, cleared by the flush */
 };
 
 struct cpu;
@@ -36,6 +37,7 @@ struct cpu;
 void gdt_init(struct cpu *c);
 void cpu_set_percpu(struct cpu *c);
 void cpu_enable_features(void);
+void syscall_init_cpu(void);
 
 static inline struct cpu *this_cpu(void) {
     struct cpu *c;
@@ -70,6 +72,19 @@ static inline void irq_disable(void) { __asm__ volatile("cli"); }
 static inline void cpu_relax(void) { __asm__ volatile("pause"); }
 static inline void cpu_idle_wait(void) { __asm__ volatile("sti; hlt"); }
 static inline void halt(void) { __asm__ volatile("hlt"); }
+
+/* A CPU spinning on a lock usually has interrupts off, so it cannot take a TLB
+ * shootdown IPI, while the CPU that sent the IPI waits for the answer and may
+ * hold (or wait behind a holder of) the lock we want. To keep that from
+ * deadlocking, spinners answer pending shootdowns themselves (smp.c). */
+extern volatile int tlb_shootdowns_active;
+void tlb_service(void);
+
+static inline void arch_spin_wait(void) {
+    cpu_relax();
+    if (__atomic_load_n(&tlb_shootdowns_active, __ATOMIC_RELAXED))
+        tlb_service();
+}
 
 static inline uint64_t arch_counter(void) {
     uint32_t lo, hi;

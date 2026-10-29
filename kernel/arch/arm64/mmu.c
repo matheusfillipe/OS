@@ -5,8 +5,8 @@
 
 /* The kernel root stays in TTBR1. TTBR0 holds the user root, or an empty
  * table while no address space is loaded, so loading the kernel root means
- * loading that empty table. Without ASIDs every TTBR0 change flushes the
- * local TLB. */
+ * loading that empty table. We run without ASIDs, so every TTBR0 change
+ * flushes the local TLB. */
 
 #define TCR_T0SZ(n)   ((uint64_t)(n) << 0)
 #define TCR_T1SZ(n)   ((uint64_t)(n) << 16)
@@ -17,10 +17,7 @@
 
 static uint64_t empty_root[512] __attribute__((aligned(PAGE_SIZE)));
 
-static uint64_t empty_root_phys(void) {
-    struct limine_executable_address_response *ka = boot_kaddr_request.response;
-    return (uint64_t)empty_root - ka->virtual_base + ka->physical_base;
-}
+static uint64_t empty_root_phys(void) { return kernel_virt_to_phys(empty_root); }
 
 /* We keep Limine's layout (4 KiB granules, 48-bit addresses in both halves),
  * so its tables stay valid until vmm_init replaces them. Output addresses
@@ -42,6 +39,27 @@ void arch_load_root(uint64_t phys) {
         phys = empty_root_phys();
     }
     __asm__ volatile("dsb ishst; msr ttbr0_el1, %0; isb; tlbi vmalle1; dsb nsh; isb" ::"r"(phys) : "memory");
+}
+
+#define CTR_IDC (1ULL << 28)
+#define CTR_DIC (1ULL << 29)
+
+void arch_sync_icache(void *kva, size_t len) {
+    uint64_t ctr, start = (uint64_t)kva, end = start + len;
+    __asm__ volatile("mrs %0, ctr_el0" : "=r"(ctr));
+    if (!(ctr & CTR_IDC)) {
+        uint64_t line = 4ULL << ((ctr >> 16) & 0xf);
+        for (uint64_t p = ALIGN_DOWN(start, line); p < end; p += line)
+            __asm__ volatile("dc cvau, %0" ::"r"(p) : "memory");
+    }
+    __asm__ volatile("dsb ish" ::: "memory");
+    if (!(ctr & CTR_DIC)) {
+        uint64_t line = 4ULL << (ctr & 0xf);
+        for (uint64_t p = ALIGN_DOWN(start, line); p < end; p += line)
+            __asm__ volatile("ic ivau, %0" ::"r"(p) : "memory");
+        __asm__ volatile("dsb ish" ::: "memory");
+    }
+    __asm__ volatile("isb" ::: "memory");
 }
 
 uint64_t arch_current_root(void) {

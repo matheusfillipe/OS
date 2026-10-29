@@ -22,7 +22,7 @@ SRCS := $(shell find . \( -name '*.c' -o -name '*.S' \) -not -path './arch/*' -n
         $(shell find arch/$(ARCH) $(ARCH_DIRS) \( -name '*.c' -o -name '*.S' \) | sed 's|^|./|')
 OBJS := $(patsubst ./%,$(BUILD)/%.o,$(SRCS))
 
-$(OUT): $(OBJS) arch/$(ARCH)/linker.ld
+$(OUT): $(OBJS) arch/$(ARCH)/linker.ld arch/kernel.ld
 	@mkdir -p $(dir $@)
 	$(LD) $(LDFLAGS) $(OBJS) -o $@
 

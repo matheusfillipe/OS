@@ -47,12 +47,8 @@ static const uint32_t sigreturn_code[] = {
 
 void sigreturn_map(struct mm *mm);
 void sigreturn_map(struct mm *mm) {
-    if (mm_map(mm, SIGRETURN_PAGE, SIGRETURN_PAGE + PAGE_SIZE, PROT_READ | PROT_EXEC, VMA_ANON) < 0 ||
-        mm_copy_out(mm, SIGRETURN_PAGE, sigreturn_code, sizeof sigreturn_code) < 0)
-        return;
-    /* We wrote the instructions through the data side, so instruction fetch
-     * must not keep an older copy of the line. */
-    __asm__ volatile("dc cvau, %0; dsb ish; ic ivau, %0; dsb ish; isb" ::"r"(SIGRETURN_PAGE) : "memory");
+    if (mm_map(mm, SIGRETURN_PAGE, SIGRETURN_PAGE + PAGE_SIZE, PROT_READ | PROT_EXEC, VMA_ANON) == 0)
+        mm_copy_out(mm, SIGRETURN_PAGE, sigreturn_code, sizeof sigreturn_code);
 }
 
 bool arch_signal_setup(struct regs *r, const struct siginfo *si, uint64_t mask, const struct linux_sigaction *sa) {

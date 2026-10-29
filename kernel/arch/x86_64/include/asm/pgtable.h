@@ -1,5 +1,6 @@
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <asm/msr.h>
 #include <kernel/mm.h>
@@ -19,6 +20,10 @@
 /* User space owns the lower half of the root; every address space shares the
  * kernel's upper-half entries. */
 #define USER_PGD_ENTRIES 256
+
+/* The direct map covers firmware-reserved ranges too: the MTRRs keep the
+ * device registers among them uncached whatever the page attributes say. */
+#define DIRECT_MAP_RESERVED true
 
 #define KERNEL_VIRT_BASE 0xffff800000000000ULL
 
@@ -76,5 +81,7 @@ static inline uint64_t pte_flags(uint64_t e) {
 
 static inline void arch_tlb_flush_page(uint64_t va) { invlpg(va); }
 static inline void arch_tlb_flush_all(void) { write_cr3(read_cr3()); }
+static inline void arch_kernel_map_sync(void) {}
+static inline void arch_sync_icache(void *kva, size_t len) { (void)kva, (void)len; }
 static inline void arch_load_root(uint64_t phys) { write_cr3(phys); }
 static inline uint64_t arch_current_root(void) { return read_cr3(); }

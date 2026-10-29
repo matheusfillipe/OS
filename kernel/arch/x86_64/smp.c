@@ -9,7 +9,7 @@ __attribute__((used, section(".limine_requests")))
 static volatile struct limine_mp_request boot_mp_request = {
     .id = LIMINE_MP_REQUEST_ID, .revision = 0, .flags = LIMINE_MP_REQUEST_X86_64_X2APIC};
 
-void arch_send_resched(struct cpu *c) { lapic_send_ipi(c->arch.lapic_id, VEC_RESCHED); }
+void arch_send_resched(struct cpu *c) { lapic_send_ipi(c->arch.lapic_id, IRQ_RESCHED); }
 
 /* Device interrupts all go to the boot CPU's local APIC. */
 bool arch_msi_setup(const struct pci_dev *d, unsigned irq, uint64_t *addr, uint32_t *data) {
@@ -46,7 +46,7 @@ void tlb_service(void) {
     struct cpu *c = this_cpu();
     /* Clear first, then flush: a request that arrives after the clear stays
      * pending (and has its own IPI), so none is lost. */
-    if (__atomic_exchange_n(&c->tlb_flush_pending, 0, __ATOMIC_ACQ_REL))
+    if (__atomic_exchange_n(&c->arch.tlb_flush_pending, 0, __ATOMIC_ACQ_REL))
         arch_tlb_flush_all();
 }
 
@@ -74,16 +74,16 @@ void tlb_shootdown(struct mm *mm) {
         if (!any)
             __atomic_add_fetch(&tlb_shootdowns_active, 1, __ATOMIC_SEQ_CST);
         any = true;
-        __atomic_store_n(&c->tlb_flush_pending, 1, __ATOMIC_SEQ_CST);
+        __atomic_store_n(&c->arch.tlb_flush_pending, 1, __ATOMIC_SEQ_CST);
         sent[i / 64] |= 1ULL << (i % 64);
-        lapic_send_ipi(c->arch.lapic_id, VEC_TLB);
+        lapic_send_ipi(c->arch.lapic_id, IRQ_TLB);
     }
     for (uint32_t i = 0; any && i < cpu_count; i++) {
         if (!(sent[i / 64] & (1ULL << (i % 64))))
             continue;
         /* Answer requests aimed at us while we wait, or two CPUs shooting
          * at each other would wait forever. */
-        while (__atomic_load_n(&cpus[i]->tlb_flush_pending, __ATOMIC_ACQUIRE)) {
+        while (__atomic_load_n(&cpus[i]->arch.tlb_flush_pending, __ATOMIC_ACQUIRE)) {
             cpu_relax();
             tlb_service();
         }
@@ -112,9 +112,9 @@ static void ap_entry(struct limine_mp_info *info) {
 }
 
 void smp_init(void) {
-    idt_set_handler(VEC_TIMER, timer_irq);
-    idt_set_handler(VEC_RESCHED, resched_irq);
-    idt_set_handler(VEC_TLB, tlb_irq);
+    idt_set_handler(IRQ_TIMER, timer_irq);
+    idt_set_handler(IRQ_RESCHED, resched_irq);
+    idt_set_handler(IRQ_TLB, tlb_irq);
     lapic_init_cpu(); /* BSP tick */
     this_cpu()->online = true; /* local APIC ready: may send and receive IPIs */
 

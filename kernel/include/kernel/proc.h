@@ -315,7 +315,6 @@ void fpu_reset(void *area);
 void fpu_capture_clean_state(void);
 
 /* System call entry */
-void syscall_init_cpu(void);
 void syscall_dispatch(struct regs *r);
 
 /* Time */

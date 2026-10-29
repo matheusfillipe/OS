@@ -1495,9 +1495,9 @@ static bool bring_up(struct pci_dev *pd) {
     if (iss && res.adc && !stream_init(&hda.in, false, 0, IN_TAG))
         hda.in.present = false;
 
-    hda.irq = pci_enable_msi(pd, VEC_HDA);
+    hda.irq = pci_enable_msi(pd, IRQ_HDA);
     if (hda.irq) {
-        irq_set_handler(VEC_HDA, hda_irq);
+        irq_set_handler(IRQ_HDA, hda_irq);
         uint32_t mask = 1u << hda.out.index;
         if (hda.in.present)
             mask |= 1u << hda.in.index;

@@ -3,12 +3,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Interrupt vectors. 0-31 are CPU exceptions. */
-#define VEC_TIMER    0x20
-#define VEC_RESCHED  0x21
-#define VEC_TLB      0x22
-#define VEC_HDA      0x2c
-#define VEC_SPURIOUS 0xff
+/* IRQ numbers, which on x86 are the interrupt vectors. 0-31 are CPU exceptions. */
+#define IRQ_TIMER    0x20
+#define IRQ_RESCHED  0x21
+#define IRQ_TLB      0x22
+#define IRQ_HDA      0x2c
+#define IRQ_SPURIOUS 0xff
 
 typedef void (*irq_handler_t)(struct regs *r);
 

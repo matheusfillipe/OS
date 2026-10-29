@@ -36,6 +36,7 @@ uint64_t arch_hwcap(void) {
     return h;
 }
 
+/* We read the counter frequency from CNTFRQ_EL0, so we have nothing to measure. */
 void arch_cpuinfo_init(void) {}
 
 void arch_cpuinfo(struct sbuf *b) {
@@ -51,6 +52,7 @@ void arch_cpuinfo(struct sbuf *b) {
     }
 }
 
+/* arm64 has no architectural register that reports the CPU's base frequency. */
 uint32_t arch_base_mhz(void) { return 0; }
 
 /* CLIDR_EL1 lists the cache type per level; a level with separate data and

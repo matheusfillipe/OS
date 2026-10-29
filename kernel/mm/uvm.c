@@ -78,7 +78,7 @@ static uint64_t *pte_slot(struct mm *mm, uint64_t va, bool create) {
             if (!p)
                 return NULL;
             memset(phys_to_virt(p), 0, PAGE_SIZE);
-            table[idx] = pte_table(p, true);
+            pte_publish(&table[idx], pte_table(p, true));
         }
         table = phys_to_virt(pte_phys(table[idx]));
     }
@@ -115,13 +115,15 @@ static bool break_cow(struct mm *mm, struct vma *v, uint64_t va, uint64_t *pte) 
         if (!p)
             return false;
         memcpy(phys_to_virt(p), phys_to_virt(old), PAGE_SIZE);
+        if (v->prot & PROT_EXEC)
+            arch_sync_icache(phys_to_virt(p), PAGE_SIZE);
         /* We take the old entry out of every TLB before writing the new one,
          * since arm64 forbids changing a live entry's output address
          * (break-before-make). */
         *pte = 0;
         arch_tlb_flush_page(va);
         tlb_shootdown(mm); /* other threads must stop reading the old page */
-        *pte = pte_make(p, pte_flags_for(v->prot));
+        pte_publish(pte, pte_make(p, pte_flags_for(v->prot)));
         page_unref(old);   /* the other side keeps it */
     } else {
         *pte = pte_make(old, pte_flags_for(v->prot)); /* the last one: just ours again */
@@ -603,7 +605,7 @@ static uint64_t *fault_in(struct mm *mm, struct vma *v, uint64_t va) {
     }
     if (!p)
         return NULL;
-    *pte = pte_make(p, pte_flags_for(v->prot));
+    pte_publish(pte, pte_make(p, pte_flags_for(v->prot)));
     return pte;
 }
 
@@ -652,6 +654,7 @@ static int copy_pages(struct mm *mm, uint64_t dst, const void *src, size_t len) 
             memcpy(kva, s, n);
         else
             memset(kva, 0, n);
+        arch_sync_icache(kva, n);
         dst += n;
         len -= n;
         if (s)

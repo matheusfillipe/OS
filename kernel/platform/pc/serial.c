@@ -4,7 +4,7 @@
 #include <kernel/platform.h>
 
 #define COM1 0x3f8
-#define VEC_COM1 0x24
+#define IRQ_COM1 0x24
 
 static bool present;
 
@@ -54,8 +54,8 @@ static void com1_irq(struct regs *r) {
 
 void platform_console_rx_init(void (*rx)(char c)) {
     rx_callback = rx;
-    idt_set_handler(VEC_COM1, com1_irq);
-    isa_irq_route(4, VEC_COM1);
+    idt_set_handler(IRQ_COM1, com1_irq);
+    isa_irq_route(4, IRQ_COM1);
     outb(COM1 + 1, 0x01); /* interrupt on received data */
 }
 

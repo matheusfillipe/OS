@@ -12,7 +12,7 @@ static volatile struct limine_mp_request boot_mp_request = {.id = LIMINE_MP_REQU
 
 static uint64_t timer_period; /* counter ticks per 1/HZ s */
 
-void arch_send_resched(struct cpu *c) { gic_send_sgi(c, VEC_RESCHED); }
+void arch_send_resched(struct cpu *c) { gic_send_sgi(c, IRQ_RESCHED); }
 
 /* The timer's interrupt is level-triggered: we move the compare value past
  * the counter before the EOI, or the line would still be up. */
@@ -44,16 +44,6 @@ static void timer_init_cpu(void) {
  * which runs on a CPU that has the mm loaded) before it calls
  * tlb_shootdown. Root switches flush only the local TLB, which is all they
  * have to. */
-volatile int tlb_shootdowns_active;
-
-void tlb_service(void) {
-    struct cpu *c = this_cpu();
-    /* Clear first, then flush: a request that arrives after the clear stays
-     * pending (and has its own IPI), so none is lost. */
-    if (__atomic_exchange_n(&c->tlb_flush_pending, 0, __ATOMIC_ACQ_REL))
-        arch_tlb_flush_all();
-}
-
 void tlb_shootdown(struct mm *mm) { (void)mm; }
 
 /* Each secondary CPU arrives here on Limine's page tables and a small
@@ -75,8 +65,8 @@ void smp_init(void) {
     uint64_t freq;
     __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(freq));
     timer_period = freq / HZ;
-    irq_set_handler(VEC_TIMER, timer_irq);
-    irq_set_handler(VEC_RESCHED, resched_irq);
+    irq_set_handler(IRQ_TIMER, timer_irq);
+    irq_set_handler(IRQ_RESCHED, resched_irq);
     gic_init_cpu();
     timer_init_cpu(); /* BSP tick */
     this_cpu()->online = true;
@@ -98,7 +88,7 @@ void smp_init(void) {
         info->extra_argument = (uint64_t)c;
         __atomic_store_n(&info->goto_address, ap_entry, __ATOMIC_SEQ_CST);
     }
-    uint64_t deadline = global_ticks + HZ; /* one second */
+    uint64_t deadline = global_ticks + HZ;
     for (uint32_t i = 1; i < cpu_count; i++)
         while (!__atomic_load_n(&cpus[i]->online, __ATOMIC_ACQUIRE)) {
             if (global_ticks > deadline)

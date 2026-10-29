@@ -1,10 +1,10 @@
-#include <asm/io.h>
 #include <kernel/arch.h>
 #include <kernel/blkdev.h>
 #include <kernel/boot.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
 #include <kernel/pci.h>
+#include <kernel/platform.h>
 #include <kernel/proc.h>
 #include <kernel/sched.h>
 
@@ -89,9 +89,16 @@ struct vblk {
     bool can_flush;
 };
 
+static uint32_t reg_read(struct vblk *v, uint16_t reg, unsigned size) {
+    return platform_pci_io_read((uint16_t)(v->io + reg), size);
+}
+
+static void reg_write(struct vblk *v, uint16_t reg, unsigned size, uint32_t val) {
+    platform_pci_io_write((uint16_t)(v->io + reg), size, val);
+}
+
 static uint64_t config64(struct vblk *v, uint16_t off) {
-    return (uint64_t)inl((uint16_t)(v->io + VP_CONFIG + off)) |
-           (uint64_t)inl((uint16_t)(v->io + VP_CONFIG + off + 4)) << 32;
+    return (uint64_t)reg_read(v, VP_CONFIG + off, 4) | (uint64_t)reg_read(v, VP_CONFIG + off + 4, 4) << 32;
 }
 
 /* Runs one request: header, the data segments of `buf`, status byte. */
@@ -131,7 +138,7 @@ static int request(struct vblk *v, uint32_t type, uint64_t sector, void *buf, si
     __atomic_thread_fence(__ATOMIC_SEQ_CST);
     v->avail->idx = ++v->avail_idx;
     __atomic_thread_fence(__ATOMIC_SEQ_CST);
-    outw((uint16_t)(v->io + VP_QUEUE_NOTIFY), 0);
+    reg_write(v, VP_QUEUE_NOTIFY, 2, 0);
 
     uint64_t deadline = global_ticks + (uint64_t)TIMEOUT_MS * HZ / 1000;
     for (uint32_t spins = 0; v->used->idx == v->used_seen; spins++) {
@@ -197,18 +204,18 @@ static void bring_up(struct pci_dev *pd) {
         return;
     pci_enable(pd);
     v->io = (uint16_t)pd->bar[0];
-    outb((uint16_t)(v->io + VP_STATUS), 0); /* reset */
-    outb((uint16_t)(v->io + VP_STATUS), STATUS_ACK);
-    outb((uint16_t)(v->io + VP_STATUS), STATUS_ACK | STATUS_DRIVER);
-    uint32_t features = inl((uint16_t)(v->io + VP_DEVICE_FEATURES));
+    reg_write(v, VP_STATUS, 1, 0); /* reset */
+    reg_write(v, VP_STATUS, 1, STATUS_ACK);
+    reg_write(v, VP_STATUS, 1, STATUS_ACK | STATUS_DRIVER);
+    uint32_t features = reg_read(v, VP_DEVICE_FEATURES, 4);
     uint32_t want = features & (BLK_F_FLUSH | BLK_F_BLK_SIZE | BLK_F_RO);
-    outl((uint16_t)(v->io + VP_GUEST_FEATURES), want);
+    reg_write(v, VP_GUEST_FEATURES, 4, want);
     v->can_flush = want & BLK_F_FLUSH;
 
-    outw((uint16_t)(v->io + VP_QUEUE_SELECT), 0);
-    uint16_t qsize = inw((uint16_t)(v->io + VP_QUEUE_SIZE));
+    reg_write(v, VP_QUEUE_SELECT, 2, 0);
+    uint16_t qsize = (uint16_t)reg_read(v, VP_QUEUE_SIZE, 2);
     if (qsize < 4) {
-        outb((uint16_t)(v->io + VP_STATUS), STATUS_FAILED);
+        reg_write(v, VP_STATUS, 1, STATUS_FAILED);
         kprintf("virtio-blk: no usable queue\n");
         return;
     }
@@ -219,7 +226,7 @@ static void bring_up(struct pci_dev *pd) {
     size_t ring_bytes = used_off + ALIGN_UP(6 + 8u * qsize, PAGE_SIZE);
     uint64_t ring_phys = pmm_alloc(ring_bytes / PAGE_SIZE), hdr_phys = pmm_alloc(1);
     if (!ring_phys || !hdr_phys || (ring_phys >> 12) >> 32) {
-        outb((uint16_t)(v->io + VP_STATUS), STATUS_FAILED);
+        reg_write(v, VP_STATUS, 1, STATUS_FAILED);
         kprintf("virtio-blk: no memory for the queue\n");
         return;
     }
@@ -233,12 +240,12 @@ static void bring_up(struct pci_dev *pd) {
     v->hdr_phys = hdr_phys;
     v->hdr = phys_to_virt(hdr_phys);
     v->status = (volatile uint8_t *)v->hdr + 64;
-    outl((uint16_t)(v->io + VP_QUEUE_PFN), (uint32_t)(ring_phys >> 12));
-    outb((uint16_t)(v->io + VP_STATUS), STATUS_ACK | STATUS_DRIVER | STATUS_DRIVER_OK);
+    reg_write(v, VP_QUEUE_PFN, 4, (uint32_t)(ring_phys >> 12));
+    reg_write(v, VP_STATUS, 1, STATUS_ACK | STATUS_DRIVER | STATUS_DRIVER_OK);
 
     v->bd.sector_size = 512;
     if (want & BLK_F_BLK_SIZE) {
-        uint32_t bs = inl((uint16_t)(v->io + VP_CONFIG + 0x14));
+        uint32_t bs = reg_read(v, VP_CONFIG + 0x14, 4);
         if (bs >= 512 && bs <= 4096 && !(bs & (bs - 1)))
             v->bd.sector_size = bs;
     }
@@ -247,7 +254,7 @@ static void bring_up(struct pci_dev *pd) {
     v->bd.rw = vblk_rw;
     v->bd.flush = vblk_flush;
     v->bd.drv = v;
-    (void)inb((uint16_t)(v->io + VP_ISR)); /* clear any pending interrupt */
+    (void)reg_read(v, VP_ISR, 1); /* clear any pending interrupt */
     if (blkdev_register(&v->bd) < 0) {
         kprintf("virtio-blk: cannot register the disk\n");
         return;

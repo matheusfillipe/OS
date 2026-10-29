@@ -214,7 +214,7 @@ void apic_init(void) {
     enable_lapic_mode();
     pic_disable();
     parse_madt();
-    lapic_write(LAPIC_SVR, 0x100 | VEC_SPURIOUS);
+    lapic_write(LAPIC_SVR, 0x100 | IRQ_SPURIOUS);
     uint32_t per_10ms = calibrate_timer();
     ticks_per_period = per_10ms * 100 / HZ;
     kprintf("apic: %s, %d I/O APIC(s), timer %u kHz\n", x2apic ? "x2APIC" : "xAPIC", ioapic_count,
@@ -223,8 +223,8 @@ void apic_init(void) {
 
 void lapic_init_cpu(void) {
     enable_lapic_mode();
-    lapic_write(LAPIC_SVR, 0x100 | VEC_SPURIOUS);
+    lapic_write(LAPIC_SVR, 0x100 | IRQ_SPURIOUS);
     lapic_write(LAPIC_TMR_DIV, 0x3);
-    lapic_write(LAPIC_LVT_TMR, VEC_TIMER | LVT_PERIODIC);
+    lapic_write(LAPIC_LVT_TMR, IRQ_TIMER | LVT_PERIODIC);
     lapic_write(LAPIC_TMR_INIT, ticks_per_period);
 }

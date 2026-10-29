@@ -34,6 +34,7 @@ static inline void cpu_relax(void) { __asm__ volatile("yield"); }
  * after it: an interrupt that arrives after the caller's check is never missed. */
 static inline void cpu_idle_wait(void) { __asm__ volatile("wfi; msr daifclr, #3" ::: "memory"); }
 static inline void halt(void) { __asm__ volatile("wfi"); }
+static inline void arch_spin_wait(void) { cpu_relax(); }
 
 /* Reading the pointer and then the field takes two loads, and a migration
  * between them would read another CPU's field, so we keep interrupts off. */

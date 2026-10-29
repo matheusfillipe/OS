@@ -32,7 +32,7 @@ static uint64_t *walk(uint64_t *pgd, uint64_t virt, int level, uint64_t flags) {
             if (!next)
                 return NULL;
             e = pte_table(virt_to_phys_hhdm(next), flags & PG_USER);
-            table[idx] = e;
+            pte_publish(&table[idx], e);
         } else if (pte_is_huge(e)) {
             return NULL; /* splitting huge pages is not supported yet */
         } else if (flags & PG_USER) {
@@ -48,6 +48,7 @@ bool vmm_map(uint64_t *pgd, uint64_t virt, uint64_t phys, uint64_t flags) {
     if (!pt)
         return false;
     pt[(virt >> 12) & 0x1ff] = pte_make(phys, flags);
+    arch_kernel_map_sync();
     return true;
 }
 
@@ -56,6 +57,7 @@ bool vmm_map_huge(uint64_t *pgd, uint64_t virt, uint64_t phys, uint64_t flags) {
     if (!pd)
         return false;
     pd[(virt >> 21) & 0x1ff] = pte_make_huge(phys & ~(HUGE_PAGE - 1), flags);
+    arch_kernel_map_sync();
     return true;
 }
 
@@ -87,16 +89,27 @@ void vmm_map_mmio(uint64_t phys, uint64_t len, bool uncached) {
     spin_unlock_irqrestore(&kernel_map_lock, f);
 }
 
-static void map_kernel_range(uint64_t phys_base, uint64_t virt_base, char *start, char *end, uint64_t flags) {
+static void map_kernel_range(char *start, char *end, uint64_t flags) {
     for (uint64_t v = ALIGN_DOWN((uint64_t)start, PAGE_SIZE); v < (uint64_t)end; v += PAGE_SIZE)
-        if (!vmm_map(kernel_pgd, v, v - virt_base + phys_base, flags | PG_GLOBAL))
+        if (!vmm_map(kernel_pgd, v, kernel_virt_to_phys((void *)v), flags | PG_GLOBAL))
             panic("vmm: cannot map kernel page %lx", v);
 }
 
+static bool direct_mapped(uint64_t type) {
+    switch (type) {
+    case LIMINE_MEMMAP_BAD_MEMORY:
+        return false;
+    case LIMINE_MEMMAP_RESERVED:
+    case LIMINE_MEMMAP_RESERVED_MAPPED:
+        return DIRECT_MAP_RESERVED;
+    default:
+        return true;
+    }
+}
+
 void vmm_init(void) {
-    struct limine_executable_address_response *ka = boot_kaddr_request.response;
     struct limine_memmap_response *mm = boot_memmap_request.response;
-    KASSERT(ka && mm);
+    KASSERT(boot_kaddr_request.response && mm);
 
     arch_mmu_init();
 
@@ -105,16 +118,15 @@ void vmm_init(void) {
 
     /* Kernel image, W^X: code is read-only + executable, rodata read-only,
      * everything else read/write but never executable. */
-    uint64_t pb = ka->physical_base, vb = ka->virtual_base;
-    map_kernel_range(pb, vb, __kernel_start, __text_start, PG_WRITE);
-    map_kernel_range(pb, vb, __text_start, __text_end, PG_EXEC);
-    map_kernel_range(pb, vb, __rodata_start, __rodata_end, 0);
-    map_kernel_range(pb, vb, __data_start, __kernel_end, PG_WRITE);
+    map_kernel_range(__kernel_start, __text_start, PG_WRITE);
+    map_kernel_range(__text_start, __text_end, PG_EXEC);
+    map_kernel_range(__rodata_start, __rodata_end, 0);
+    map_kernel_range(__data_start, __kernel_end, PG_WRITE);
 
-    /* Direct map of all physical memory the bootloader told us about. */
+    /* Direct map of the physical memory the bootloader told us about. */
     for (uint64_t i = 0; i < mm->entry_count; i++) {
         struct limine_memmap_entry *e = mm->entries[i];
-        if (e->type == LIMINE_MEMMAP_BAD_MEMORY)
+        if (!direct_mapped(e->type))
             continue;
         uint64_t flags = PG_WRITE;
         if (e->type == LIMINE_MEMMAP_FRAMEBUFFER)
@@ -130,7 +142,7 @@ void vmm_init(void) {
         if (!pte_present(kernel_pgd[i])) {
             uint64_t *t = alloc_table();
             KASSERT(t);
-            kernel_pgd[i] = pte_table(virt_to_phys_hhdm(t), false);
+            pte_publish(&kernel_pgd[i], pte_table(virt_to_phys_hhdm(t), false));
         }
     }
 

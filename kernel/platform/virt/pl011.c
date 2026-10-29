@@ -22,25 +22,20 @@
 static volatile uint32_t *uart;
 static uint64_t early_tables[3][512] __attribute__((aligned(4096)));
 
-static uint64_t kernel_phys(const void *p) {
-    struct limine_executable_address_response *ka = boot_kaddr_request.response;
-    return (uint64_t)p - ka->virtual_base + ka->physical_base;
-}
-
 /* Limine's direct map leaves device memory out and TTBR0 is ours from base
  * revision 1 on, so until platform_console_remap we identity-map the UART's
  * 2 MiB there, through a MAIR entry Limine does not use. */
 static void map_uart_early(void) {
     uint64_t va = VIRT_UART;
-    early_tables[0][(va >> 39) & 511] = pte_table(kernel_phys(early_tables[1]), false);
-    early_tables[1][(va >> 30) & 511] = pte_table(kernel_phys(early_tables[2]), false);
+    early_tables[0][(va >> 39) & 511] = pte_table(kernel_virt_to_phys(early_tables[1]), false);
+    early_tables[1][(va >> 30) & 511] = pte_table(kernel_virt_to_phys(early_tables[2]), false);
     early_tables[2][(va >> 21) & 511] = pte_make_huge(va, PG_WRITE | PG_UNCACHED);
     uint64_t mair;
     __asm__ volatile("mrs %0, mair_el1" : "=r"(mair));
     mair = (mair & ~(0xffULL << (8 * MAIR_DEVICE))) | (uint64_t)MAIR_DEVICE_ATTR << (8 * MAIR_DEVICE);
     __asm__ volatile("msr mair_el1, %0; isb" ::"r"(mair));
     __asm__ volatile("dsb ishst; msr ttbr0_el1, %0; isb; tlbi vmalle1; dsb ish; isb" ::"r"(
-                         kernel_phys(early_tables[0]))
+                         kernel_virt_to_phys(early_tables[0]))
                      : "memory");
 }
 

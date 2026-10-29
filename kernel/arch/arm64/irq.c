@@ -21,7 +21,6 @@
 #define GICD_CTLR_ARE  (1u << 4)
 #define GICD_CTLR_G1   (1u << 1)
 
-#define GICR_CTLR      0x0000
 #define GICR_WAKER     0x0014
 #define GICR_TYPER     0x0008
 #define GICR_SGI       0x10000 /* SGI_base frame, after RD_base */

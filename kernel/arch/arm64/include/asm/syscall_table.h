@@ -1,9 +1,9 @@
 #pragma once
 
 /* Linux arm64 system call numbers -> implementations. Numbers come from
- * include/uapi/asm-generic/unistd.h and must never change. arm64 has none of
- * the legacy calls (open, stat, fork, pipe, dup2, poll, select, ...): its C
- * libraries use the *at and newer forms. */
+ * include/uapi/asm-generic/unistd.h and must never change. arm64 numbers only
+ * the newer forms (openat, newfstatat, clone, pipe2, dup3, ppoll, pselect6,
+ * ...), which its C libraries use. */
 
 #define SYSCALLS(X)                                                                                      \
     X(17, getcwd) X(19, eventfd2) X(20, epoll_create1) X(21, epoll_ctl) X(22, epoll_pwait) X(23, dup)      \
