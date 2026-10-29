@@ -31,3 +31,5 @@ extern struct cpu *cpus[MAX_CPUS];
 extern uint32_t cpu_count;
 
 void arch_selftest_breakpoint(void);
+
+uint64_t arch_hwcap(void);

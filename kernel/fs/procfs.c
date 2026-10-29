@@ -359,7 +359,7 @@ void proc_account_tick(struct regs *r) {
         cpu_time[c->id][CT_IDLE]++;
     } else {
         __atomic_add_fetch(&busy_ticks, 1, __ATOMIC_RELAXED);
-        if (r->cs & 3) {
+        if (regs_user_mode(r)) {
             cpu_time[c->id][CT_USER]++;
             if (t && t->user)
                 t->user->utime++;

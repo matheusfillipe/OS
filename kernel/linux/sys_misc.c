@@ -1,3 +1,4 @@
+#include <asm/elf.h>
 #include <kernel/arch.h>
 #include <kernel/blkdev.h>
 #include <kernel/cpu.h>
@@ -17,7 +18,7 @@ SYSCALL(uname) {
     ksnprintf(u.nodename, sizeof u.nodename, "%s", uts_hostname());
     ksnprintf(u.release, sizeof u.release, "6.1.0-os");
     ksnprintf(u.version, sizeof u.version, "#1 SMP");
-    ksnprintf(u.machine, sizeof u.machine, "x86_64");
+    ksnprintf(u.machine, sizeof u.machine, UTS_MACHINE);
     ksnprintf(u.domainname, sizeof u.domainname, "%s", uts_domainname());
     return copy_to_user(a1, &u, sizeof u);
 }

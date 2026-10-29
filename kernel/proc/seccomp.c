@@ -1,3 +1,6 @@
+#include <asm/elf.h>
+#include <asm/regs.h>
+#include <asm/syscall_table.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
 #include <kernel/ns.h>
@@ -39,7 +42,6 @@ struct seccomp_filter {
     struct sock_filter insns[];
 };
 
-#define AUDIT_ARCH_X86_64 0xC000003EU
 #define BPF_MAXINSNS 4096
 
 #define SECCOMP_RET_KILL_PROCESS 0x80000000U
@@ -322,12 +324,13 @@ bool seccomp_check(struct regs *r, uint64_t nr, int64_t *ret) {
     struct thread *t = thread_current();
     struct process *p = t->user->proc;
     if (p->seccomp_mode == 1) { /* strict: read, write, exit, sigreturn */
-        if (nr == 0 || nr == 1 || nr == 60 || nr == 15)
+        if (nr == NR_read || nr == NR_write || nr == NR_exit || nr == NR_rt_sigreturn)
             return true;
         proc_exit(SIGKILL);
     }
-    struct seccomp_data d = {.nr = (int32_t)nr, .arch = AUDIT_ARCH_X86_64, .instruction_pointer = r->rip,
-                             .args = {r->rdi, r->rsi, r->rdx, r->r10, r->r8, r->r9}};
+    struct seccomp_data d = {.nr = (int32_t)nr, .arch = AUDIT_ARCH, .instruction_pointer = regs_ip(r)};
+    for (int i = 0; i < 6; i++)
+        d.args[i] = regs_syscall_arg(r, i);
     uint32_t result = SECCOMP_RET_ALLOW;
     for (struct seccomp_filter *f = p->seccomp; f; f = f->prev) {
         uint32_t cur = run(f, &d);
@@ -347,7 +350,7 @@ bool seccomp_check(struct regs *r, uint64_t nr, int64_t *ret) {
          * and siginfo says which call, from where. */
         struct user_thread *ut = t->user;
         ut->sigsys_nr = (int)nr;
-        ut->sigsys_ip = r->rip;
+        ut->sigsys_ip = regs_ip(r);
         ut->sigsys_errno = (int)data;
         ut->sigsys_pending = true;
         ut->sigmask &= ~sigbit(SIGSYS); /* forced, as Linux does */

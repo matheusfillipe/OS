@@ -1,3 +1,4 @@
+#include <asm/elf.h>
 #include <kernel/arch.h>
 #include <kernel/boot.h>
 #include <kernel/cpu.h>
@@ -101,12 +102,15 @@ void proc_dump_threads(void) {
                             ut->sc_hist[i].a1, ut->sc_hist[i].a2, ut->sc_hist[i].a3, ut->sc_hist[i].ret);
                 }
             }
-            if ((ut->sc_nr == 232 || ut->sc_nr == 281 || ut->sc_nr == 441) && p->fds && ut->sc_a1 < MAX_FDS) {
+            const char *sc = syscall_name(ut->sc_nr);
+            if ((!strcmp(sc, "epoll_wait") || !strcmp(sc, "epoll_pwait") || !strcmp(sc, "epoll_pwait2")) && p->fds &&
+                ut->sc_a1 < MAX_FDS) {
                 void epoll_debug_dump(struct file *f);
                 epoll_debug_dump(p->fds->fd[ut->sc_a1]);
             }
             /* blocked reading: what it reads, and whether there is something there now */
-            if ((ut->sc_nr == 0 || ut->sc_nr == 45 || ut->sc_nr == 47) && p->fds && ut->sc_a1 < MAX_FDS) {
+            if ((!strcmp(sc, "read") || !strcmp(sc, "recvfrom") || !strcmp(sc, "recvmsg")) && p->fds &&
+                ut->sc_a1 < MAX_FDS) {
                 struct file *fl = p->fds->fd[ut->sc_a1];
                 if (fl && fl->vnode) {
                     struct waitq *wq;
@@ -429,7 +433,7 @@ static void setup_signal_frame(struct regs *r, int sig, struct linux_sigaction *
         ut->sigsys_pending = false;
         si.si_code = 1; /* SYS_SECCOMP */
         si.si_errno = ut->sigsys_errno;
-        uint32_t arch = 0xC000003EU;
+        uint32_t arch = AUDIT_ARCH;
         memcpy(si.rest, &ut->sigsys_ip, 8);
         memcpy(si.rest + 8, &ut->sigsys_nr, 4);
         memcpy(si.rest + 12, &arch, 4);
