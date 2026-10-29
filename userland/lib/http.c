@@ -21,6 +21,7 @@
 #include <psa/crypto.h>
 
 #define CA_BUNDLE "/etc/ssl/certs/ca-certificates.crt"
+#define CA_BUNDLE_BUILTIN "/usr/share/os/ca-certificates.crt"
 
 static struct {
     bool ready;
@@ -55,6 +56,8 @@ static int tls_global_init(char *err, size_t errlen) {
         return -1;
     }
     int r = mbedtls_x509_crt_parse_file(&tls.ca, CA_BUNDLE);
+    if (r < 0)
+        r = mbedtls_x509_crt_parse_file(&tls.ca, CA_BUNDLE_BUILTIN);
     if (r < 0) {
         snprintf(err, errlen, "could not load trusted certificates (%s)", CA_BUNDLE);
         return -1;
