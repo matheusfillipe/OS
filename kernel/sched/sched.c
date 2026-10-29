@@ -14,8 +14,6 @@
 
 #define KSTACK_SIZE (32 * 1024)
 
-void switch_context(uint64_t *save_rsp, uint64_t new_rsp);
-void thread_start_trampoline(void);
 void thread_start(void);
 
 static spinlock_t rq_lock = SPINLOCK_INIT;
@@ -85,14 +83,11 @@ static void sched_finish(void) {
     struct cpu *c = this_cpu();
     struct thread *prev = c->prev, *cur = c->current;
     c->prev = NULL;
-    if (cur != c->idle) {
-        uint64_t top = thread_kstack_top(cur);
-        c->arch.kernel_rsp = top;
-        c->arch.tss.rsp[0] = top;
-    }
+    if (cur != c->idle)
+        arch_set_kernel_stack(c, thread_kstack_top(cur));
     struct mm *mm = NULL;
     if (cur->user) {
-        wrmsr(MSR_FS_BASE, cur->user->fs_base);
+        arch_load_tls(cur->user->tls);
         fpu_restore(cur->user->fpu);
         /* An exiting thread has let go of the mm: the last thread of its
          * process may already be freeing it. */
@@ -196,14 +191,7 @@ struct thread *thread_create_ex(const char *name, void (*entry)(void *), void *a
     t->switch_reserve = ALIGN_UP(reserve, 16);
     ksnprintf(t->name, sizeof t->name, "%s", name);
 
-    /* Initial frame consumed by switch_context: six callee-saved registers,
-     * then the return address. After the ret, rsp is 16-byte aligned, so the
-     * trampoline's call enters thread_start with ABI-correct alignment. */
-    uint64_t *sp = (uint64_t *)(t->kstack + KSTACK_SIZE - t->switch_reserve);
-    *--sp = (uint64_t)thread_start_trampoline;
-    for (int i = 0; i < 6; i++)
-        *--sp = 0;
-    t->rsp = (uint64_t)sp;
+    t->rsp = arch_thread_initial_sp((uint64_t)(t->kstack + KSTACK_SIZE - t->switch_reserve));
     t->state = THREAD_BLOCKED;
 
     uint64_t f = spin_lock_irqsave(&rq_lock);

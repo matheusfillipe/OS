@@ -22,6 +22,24 @@ static void fork_child_entry(void *arg) {
     return_to_user(frame);
 }
 
+static void inherit_user_state(struct user_thread *ut, uint64_t flags, uint64_t ctid, uint64_t tls) {
+    struct user_thread *cur = thread_current()->user;
+    ut->sigmask = cur->sigmask;
+    ut->tls = (flags & CLONE_SETTLS) ? tls : cur->tls;
+    fpu_save(cur->fpu);
+    fpu_copy(ut->fpu, cur->fpu);
+    if (flags & CLONE_CHILD_CLEARTID)
+        ut->clear_child_tid = ctid;
+}
+
+/* The child resumes from the same syscall, on the stack it was given,
+ * seeing 0. */
+static void setup_child_frame(struct thread *t, uint64_t newsp) {
+    struct regs *frame = (struct regs *)(thread_kstack_top(t) - sizeof(struct regs));
+    *frame = *current_user_frame();
+    arch_fork_child_regs(frame, newsp);
+}
+
 /* A new thread in the caller's process. Everything a process holds (mm,
  * descriptors, cwd, signal handlers) is shared by construction, so we ask
  * for the full set of sharing flags; glibc and musl always pass them. */
@@ -46,20 +64,8 @@ static int64_t clone_thread(uint64_t flags, uint64_t newsp, uint64_t ptid, uint6
     ut->proc = p;
     ut->tid = proc_alloc_tid();
     pid_register(p->ns.pid, ut->tid);
-    ut->sigmask = cur->user->sigmask;
-    ut->fs_base = (flags & CLONE_SETTLS) ? tls : cur->user->fs_base;
-    fpu_save(cur->user->fpu);
-    fpu_copy(ut->fpu, cur->user->fpu);
-    if (flags & CLONE_CHILD_CLEARTID)
-        ut->clear_child_tid = ctid;
-
-    /* The child resumes from the same syscall, on the stack it was given,
-     * seeing 0. */
-    struct regs *frame = (struct regs *)(thread_kstack_top(t) - sizeof(struct regs));
-    *frame = *current_user_frame();
-    frame->rax = 0;
-    if (newsp)
-        frame->rsp = newsp;
+    inherit_user_state(ut, flags, ctid, tls);
+    setup_child_frame(t, newsp);
 
     int tid = pid_to_user(ut->tid);
     if (flags & CLONE_PARENT_SETTID)
@@ -147,19 +153,9 @@ static int64_t do_clone(uint64_t flags, uint64_t newsp, uint64_t ptid, uint64_t 
     }
     ut->proc = child;
     ut->tid = child->pid;
-    ut->sigmask = cur->user->sigmask;
-    ut->fs_base = (flags & CLONE_SETTLS) ? tls : cur->user->fs_base;
-    fpu_save(cur->user->fpu);
-    fpu_copy(ut->fpu, cur->user->fpu);
-    if (flags & CLONE_CHILD_CLEARTID)
-        ut->clear_child_tid = ctid;
+    inherit_user_state(ut, flags, ctid, tls);
     proc_add_thread(child, ut);
-
-    struct regs *frame = (struct regs *)(thread_kstack_top(t) - sizeof(struct regs));
-    *frame = *current_user_frame();
-    frame->rax = 0;
-    if (newsp)
-        frame->rsp = newsp;
+    setup_child_frame(t, newsp);
 
     int pid = pid_to_user(child->pid), cpid = pid_in(child->ns.pid, child->pid);
     if (flags & CLONE_PARENT_SETTID)
@@ -266,7 +262,7 @@ SYSCALL(execve) {
     free_strings(argv);
     free_strings(envp);
     kfree(path);
-    return res < 0 ? res : (int64_t)frame->rax; /* success: keep the new frame's rax (0) */
+    return res < 0 ? res : (int64_t)regs_return(frame); /* success: keep the new frame's return value (0) */
 }
 
 /* ---- exit / wait ---- */
@@ -784,25 +780,6 @@ SYSCALL(getsid) {
 }
 
 /* ---- thread-local storage, limits, misc process state ---- */
-
-SYSCALL(arch_prctl) {
-    UNUSED_ARGS();
-    struct user_thread *u = thread_current()->user;
-    switch (a1) {
-    case ARCH_SET_FS:
-        if (a2 >= USER_TOP)
-            return -EPERM;
-        u->fs_base = a2;
-        wrmsr(MSR_FS_BASE, a2);
-        return 0;
-    case ARCH_GET_FS:
-        return copy_to_user(a2, &u->fs_base, 8);
-    case ARCH_SET_GS:
-    case ARCH_GET_GS:
-        return -EINVAL;
-    }
-    return -EINVAL;
-}
 
 SYSCALL(set_tid_address) {
     UNUSED_ARGS();

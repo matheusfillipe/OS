@@ -32,4 +32,16 @@ extern uint32_t cpu_count;
 
 void arch_selftest_breakpoint(void);
 
+void switch_context(uint64_t *save_sp, uint64_t new_sp);
+uint64_t arch_thread_initial_sp(uint64_t stack_top);
+void arch_set_kernel_stack(struct cpu *c, uint64_t top);
+void arch_load_tls(uint64_t tls);
+void arch_exec_init_regs(struct regs *r, uint64_t entry, uint64_t sp);
+void arch_fork_child_regs(struct regs *r, uint64_t new_sp);
+
+struct siginfo;
+struct linux_sigaction;
+bool arch_signal_setup(struct regs *r, const struct siginfo *si, uint64_t mask, const struct linux_sigaction *sa);
+bool arch_signal_return(struct regs *r, uint64_t *mask);
+
 uint64_t arch_hwcap(void);

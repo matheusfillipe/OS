@@ -217,7 +217,7 @@ struct user_thread {
     volatile bool killed; /* must exit at the next return to user (group exit, execve) */
     bool exiting;         /* past the point of no return in thread exit: no mm */
     void *fpu;     /* xsave area */
-    uint64_t fs_base;
+    uint64_t tls;
     uint64_t clear_child_tid;
     uint64_t sigmask;
     uint64_t pending_signals; /* directed at this thread (tgkill, faults) */

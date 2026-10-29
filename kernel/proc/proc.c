@@ -334,26 +334,6 @@ bool signal_pending_current(void) {
     return sigs_wanted(ut->proc, pending & (~ut->sigmask | sigbit(SIGKILL))) != 0;
 }
 
-/* Linux x86-64 signal frame (what rt_sigreturn and debuggers expect). */
-struct sigcontext {
-    uint64_t r8, r9, r10, r11, r12, r13, r14, r15, rdi, rsi, rbp, rbx, rdx, rax, rcx, rsp, rip, eflags;
-    uint16_t cs, gs, fs, ss;
-    uint64_t err, trapno, oldmask, cr2, fpstate, reserved[8];
-};
-struct ucontext {
-    uint64_t uc_flags, uc_link;
-    uint64_t ss_sp;
-    int32_t ss_flags, pad;
-    uint64_t ss_size;
-    struct sigcontext mc;
-    uint64_t sigmask;
-};
-struct siginfo {
-    int32_t si_signo, si_errno, si_code, pad;
-    uint8_t rest[112];
-};
-#define FPU_FRAME_SIZE 4096 /* generous: covers AVX-512 XSAVE areas */
-
 static void setup_signal_frame(struct regs *r, int sig, struct linux_sigaction *sa);
 
 /* Called on every return to user mode. */
@@ -405,29 +385,11 @@ void signal_deliver(struct regs *r) {
 
 /* Builds the handler's frame on the user stack and points `r` at the handler. */
 static void setup_signal_frame(struct regs *r, int sig, struct linux_sigaction *sa) {
-    struct thread *t = thread_current();
-    struct user_thread *ut = t->user;
+    struct user_thread *ut = thread_current()->user;
 
-    /* Linux layout, growing down from below the red zone: XSAVE area, then
-     * {return address -> restorer, ucontext, siginfo}. At handler entry
-     * (rsp + 8) is 16-byte aligned, as if the handler had been called. */
-    uint64_t fpstate = ALIGN_DOWN(r->rsp - 128 - FPU_FRAME_SIZE, 64);
-    uint64_t frame_size = 8 + sizeof(struct ucontext) + sizeof(struct siginfo);
-    uint64_t sp = ALIGN_DOWN(fpstate - frame_size, 16) - 8;
-    uint64_t uc_addr = sp + 8;
-    uint64_t si_addr = uc_addr + sizeof(struct ucontext);
-
-    struct ucontext uc = {0};
-    uc.mc = (struct sigcontext){
-        .r8 = r->r8, .r9 = r->r9, .r10 = r->r10, .r11 = r->r11, .r12 = r->r12, .r13 = r->r13,
-        .r14 = r->r14, .r15 = r->r15, .rdi = r->rdi, .rsi = r->rsi, .rbp = r->rbp, .rbx = r->rbx,
-        .rdx = r->rdx, .rax = r->rax, .rcx = r->rcx, .rsp = r->rsp, .rip = r->rip, .eflags = r->rflags,
-        .cs = (uint16_t)r->cs, .ss = (uint16_t)r->ss, .fpstate = fpstate,
-    };
     /* sigreturn restores the mask from before the call that installed a
      * temporary one (rt_sigsuspend, ppoll...), not the temporary mask. */
-    uc.sigmask = ut->restore_sigmask ? ut->saved_sigmask : ut->sigmask;
-    uc.mc.oldmask = uc.sigmask;
+    uint64_t mask = ut->restore_sigmask ? ut->saved_sigmask : ut->sigmask;
     struct siginfo si = {.si_signo = sig};
     if (sig == SIGSYS && ut->sigsys_pending) { /* from seccomp: which call, from where */
         ut->sigsys_pending = false;
@@ -438,12 +400,7 @@ static void setup_signal_frame(struct regs *r, int sig, struct linux_sigaction *
         memcpy(si.rest + 8, &ut->sigsys_nr, 4);
         memcpy(si.rest + 12, &arch, 4);
     }
-    uint64_t restorer = sa->restorer;
-
-    fpu_save(ut->fpu);
-    if (!(sa->flags & SA_RESTORER) || copy_to_user(fpstate, ut->fpu, FPU_FRAME_SIZE) < 0 ||
-        copy_to_user(uc_addr, &uc, sizeof uc) < 0 || copy_to_user(si_addr, &si, sizeof si) < 0 ||
-        copy_to_user(sp, &restorer, 8) < 0)
+    if (!arch_signal_setup(r, &si, mask, sa))
         proc_exit(SIGSEGV); /* cannot deliver: like Linux, force-kill */
 
     /* The handler runs with the current mask (the temporary one, if any)
@@ -454,36 +411,15 @@ static void setup_signal_frame(struct regs *r, int sig, struct linux_sigaction *
         ut->sigmask |= sigbit(sig);
     if (sa->flags & SA_RESETHAND)
         sa->handler = SIG_DFL;
-    r->rip = sa->handler;
-    r->rsp = sp;
-    r->rdi = (uint64_t)sig;
-    r->rsi = si_addr;
-    r->rdx = uc_addr;
-    r->rax = 0;
-    r->rflags &= ~0x400ULL; /* DF clear per ABI */
 }
 
 int64_t signal_return(struct regs *r);
 int64_t signal_return(struct regs *r) {
-    struct thread *t = thread_current();
-    /* The handler's `ret` popped the return address, so rsp is at the
-     * ucontext the delivery code wrote. */
-    uint64_t uc_addr = r->rsp;
-    struct ucontext uc;
-    if (copy_from_user(&uc, uc_addr, sizeof uc) < 0)
+    uint64_t mask;
+    if (!arch_signal_return(r, &mask))
         proc_exit(SIGSEGV);
-    struct sigcontext *m = &uc.mc;
-    r->r8 = m->r8, r->r9 = m->r9, r->r10 = m->r10, r->r11 = m->r11, r->r12 = m->r12;
-    r->r13 = m->r13, r->r14 = m->r14, r->r15 = m->r15, r->rdi = m->rdi, r->rsi = m->rsi;
-    r->rbp = m->rbp, r->rbx = m->rbx, r->rdx = m->rdx, r->rax = m->rax, r->rcx = m->rcx;
-    r->rsp = m->rsp, r->rip = m->rip;
-    r->rflags = (r->rflags & ~0x40dd5ULL) | (m->eflags & 0x40dd5ULL); /* user-changeable flags only */
-    t->user->sigmask = uc.sigmask & ~SIG_UNBLOCKABLE;
-    if (m->fpstate && copy_from_user(t->user->fpu, m->fpstate, 512) == 0) {
-        /* Restore at least the legacy area; full XSAVE restore needs header validation. */
-        fpu_restore(t->user->fpu);
-    }
-    return (int64_t)r->rax;
+    thread_current()->user->sigmask = mask & ~SIG_UNBLOCKABLE;
+    return (int64_t)regs_return(r);
 }
 
 /* ---- exit and wait ---- */

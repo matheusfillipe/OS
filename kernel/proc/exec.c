@@ -388,17 +388,12 @@ static int execve_depth(const char *path, char *const argv[], char *const envp[]
     else
         p->cap_eff_off = p->cap_perm_off = ~0ull;
 
-    t->user->fs_base = 0;
-    wrmsr(MSR_FS_BASE, 0);
+    t->user->tls = 0;
+    arch_load_tls(0);
     fpu_reset(t->user->fpu);
     fpu_restore(t->user->fpu);
 
-    memset(frame, 0, sizeof *frame);
-    frame->rip = has_interp ? interp.entry : exe.entry;
-    frame->rsp = rsp;
-    frame->cs = GDT_USER_CODE;
-    frame->ss = GDT_USER_DATA;
-    frame->rflags = 0x202;
+    arch_exec_init_regs(frame, has_interp ? interp.entry : exe.entry, rsp);
 
     if (!p->vfork_done) {
         p->vfork_done = true;
