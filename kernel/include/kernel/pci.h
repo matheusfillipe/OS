@@ -22,5 +22,5 @@ uint16_t pci_read16(const struct pci_dev *d, uint8_t off);
 void pci_write16(const struct pci_dev *d, uint8_t off, uint16_t v);
 /* Enables memory/I-O decoding and bus mastering (DMA). */
 void pci_enable(const struct pci_dev *d);
-/* Points the device's single MSI at `vector`; false if it has no MSI (caller should poll). */
-bool pci_enable_msi(const struct pci_dev *d, uint8_t vector);
+/* Points the device's single MSI at interrupt `irq`; false if it has no MSI (caller should poll). */
+bool pci_enable_msi(const struct pci_dev *d, unsigned irq);

@@ -113,20 +113,24 @@ void pci_enable(const struct pci_dev *d) {
 
 /* Message-signalled interrupts avoid the legacy INTx routing, which needs
  * the ACPI _PRT tables we don't parse yet. */
-bool pci_enable_msi(const struct pci_dev *d, uint8_t vector) {
+bool pci_enable_msi(const struct pci_dev *d, unsigned irq) {
     if (!(pci_read16(d, 0x06) & 0x10)) /* no capability list */
+        return false;
+    uint64_t addr;
+    uint32_t data;
+    if (!arch_msi_setup(d, irq, &addr, &data))
         return false;
     uint8_t ptr = pci_read32(d, 0x34) & 0xfc;
     for (int guard = 0; ptr && guard < 48; guard++) {
         uint32_t hdr = pci_read32(d, ptr);
         if ((hdr & 0xff) == 0x05) {
             uint16_t ctl = (uint16_t)(hdr >> 16);
-            pci_write32(d, (uint8_t)(ptr + 4), arch_msi_address());
+            pci_write32(d, (uint8_t)(ptr + 4), (uint32_t)addr);
             if (ctl & 0x80) { /* 64-bit address */
-                pci_write32(d, (uint8_t)(ptr + 8), 0);
-                pci_write16(d, (uint8_t)(ptr + 12), vector);
+                pci_write32(d, (uint8_t)(ptr + 8), (uint32_t)(addr >> 32));
+                pci_write16(d, (uint8_t)(ptr + 12), (uint16_t)data);
             } else {
-                pci_write16(d, (uint8_t)(ptr + 8), vector);
+                pci_write16(d, (uint8_t)(ptr + 8), (uint16_t)data);
             }
             pci_write16(d, (uint8_t)(ptr + 2), (uint16_t)((ctl & ~0x70u) | 1)); /* one vector, enabled */
             pci_write16(d, 0x04, pci_read16(d, 0x04) | 0x400);                 /* INTx off */

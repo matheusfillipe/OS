@@ -125,8 +125,8 @@ void vmm_init(void) {
     }
 
     /* Pre-create every upper-half top-level slot so user address spaces,
-     * which copy these 256 entries once, see all future kernel mappings. */
-    for (int i = 256; i < 512; i++) {
+     * which copy these entries once, see all future kernel mappings. */
+    for (int i = USER_PGD_ENTRIES; i < 512; i++) {
         if (!pte_present(kernel_pgd[i])) {
             uint64_t *t = alloc_table();
             KASSERT(t);

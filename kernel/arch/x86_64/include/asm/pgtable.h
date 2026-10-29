@@ -16,6 +16,10 @@
 #define PTE_NX      (1ULL << 63)
 #define PTE_ADDR    0x000ffffffffff000ULL
 
+/* User space owns the lower half of the root; every address space shares the
+ * kernel's upper-half entries. */
+#define USER_PGD_ENTRIES 256
+
 extern bool have_nx;
 
 static inline uint64_t pte_bits(uint64_t pg) {

@@ -38,8 +38,8 @@ struct mm *mm_create(void) {
         return NULL;
     }
     mm->pgd = phys_to_virt(phys);
-    memset(mm->pgd, 0, PAGE_SIZE / 2);
-    memcpy(mm->pgd + 256, vmm_kernel_pgd() + 256, PAGE_SIZE / 2);
+    memset(mm->pgd, 0, USER_PGD_ENTRIES * 8);
+    memcpy(mm->pgd + USER_PGD_ENTRIES, vmm_kernel_pgd() + USER_PGD_ENTRIES, (512 - USER_PGD_ENTRIES) * 8);
     mm->refcount = 1;
     mm->mmap_hint = USER_MMAP_BASE;
     return mm;
@@ -190,7 +190,7 @@ void mm_set_name(struct mm *mm, uint64_t start, uint64_t end, struct vma_name *n
  * untouched reservations cost nothing this way. */
 static uint64_t count_present(uint64_t *table, int level) {
     uint64_t n = 0;
-    for (int i = 0; i < (level == 4 ? 256 : 512); i++) {
+    for (int i = 0; i < (level == 4 ? USER_PGD_ENTRIES : 512); i++) {
         if (!pte_present(table[i]))
             continue;
         if (level == 1)
@@ -724,7 +724,7 @@ fail:
 }
 
 static void free_tables(uint64_t *table, int level) {
-    for (int i = 0; i < (level == 4 ? 256 : 512); i++) {
+    for (int i = 0; i < (level == 4 ? USER_PGD_ENTRIES : 512); i++) {
         if (!pte_present(table[i]))
             continue;
         if (level > 2)

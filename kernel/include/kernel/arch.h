@@ -46,6 +46,10 @@ uint64_t arch_hwcap(void);
 
 void arch_send_resched(struct cpu *c);
 
+struct pci_dev;
+/* The MSI address and data that raise interrupt `irq` from device `d`. */
+bool arch_msi_setup(const struct pci_dev *d, unsigned irq, uint64_t *addr, uint32_t *data);
+
 struct sbuf;
 /* Starts the baseline the reported CPU frequency is measured against. */
 void arch_cpuinfo_init(void);

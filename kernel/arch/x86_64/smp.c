@@ -12,7 +12,12 @@ static volatile struct limine_mp_request boot_mp_request = {
 void arch_send_resched(struct cpu *c) { lapic_send_ipi(c->arch.lapic_id, VEC_RESCHED); }
 
 /* Device interrupts all go to the boot CPU's local APIC. */
-uint32_t arch_msi_address(void) { return 0xfee00000u | (cpus[0]->arch.lapic_id << 12); }
+bool arch_msi_setup(const struct pci_dev *d, unsigned irq, uint64_t *addr, uint32_t *data) {
+    (void)d;
+    *addr = 0xfee00000u | (cpus[0]->arch.lapic_id << 12);
+    *data = irq;
+    return true;
+}
 
 static void timer_irq(struct regs *r) {
     lapic_eoi();
