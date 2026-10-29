@@ -53,7 +53,6 @@ static volatile uint64_t limine_requests_end[] = LIMINE_REQUESTS_END_MARKER;
 uint64_t hhdm_offset;
 
 static struct cpu bsp_cpu;
-static uint8_t bsp_df_stack[16384] __attribute__((aligned(16)));
 
 /* ---- Boot self-tests: each prints a line the boot test looks for ---- */
 
@@ -326,13 +325,8 @@ void kmain(void) {
     fbcon_init();
     kprintf("Operating System kernel starting\n");
 
-    bsp_cpu.arch.df_stack = bsp_df_stack;
-    gdt_init(&bsp_cpu);
-    cpu_set_percpu(&bsp_cpu);
+    arch_init_bsp(&bsp_cpu);
     cpus[0] = &bsp_cpu;
-    idt_init();
-    idt_load();
-    kprintf("cpu: gdt, tss and idt loaded\n");
 
     pmm_init();
     kprintf("mm: %lu MiB usable, %lu MiB free\n", pmm_total_pages() * PAGE_SIZE >> 20,
@@ -341,11 +335,7 @@ void kmain(void) {
     kprintf("mm: running on kernel page tables\n");
     heap_init();
 
-    fpu_init_cpu();
-    syscall_init_cpu();
-    acpi_init();
-    apic_init();
-    bsp_cpu.arch.lapic_id = lapic_id();
+    arch_init_interrupts(&bsp_cpu);
     sched_init_cpu();
     smp_init();
 

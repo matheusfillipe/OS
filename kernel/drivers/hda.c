@@ -124,7 +124,6 @@
 #define NBDL          (RING / PERIOD)
 #define OUT_TAG       1
 #define IN_TAG        2
-#define VEC_HDA       0x2c
 
 /* A stream whose position has not moved for this long is treated as dead:
  * there is no backend behind the codec (e.g. QEMU's wav audiodev has no
@@ -799,7 +798,7 @@ static void hda_irq(struct regs *r) {
     if (hda.in.present && (sts & (1u << hda.in.index)))
         wr8(hda.in.sd + SD_STS, SD_STS_MASK);
     service();
-    lapic_eoi();
+    irq_eoi();
 }
 
 static bool streams_running(void *arg) {
@@ -1434,31 +1433,6 @@ static const struct vnode_ops mixer_ops = {.ioctl = mixer_ioctl};
 
 /* ---- setup ---- */
 
-/* Message-signalled interrupts avoid the legacy INTx routing, which needs
- * the ACPI _PRT tables we don't parse yet. */
-static bool enable_msi(struct pci_dev *d, uint8_t vector) {
-    if (!(pci_read16(d, 0x06) & 0x10)) /* no capability list */
-        return false;
-    uint8_t ptr = pci_read32(d, 0x34) & 0xfc;
-    for (int guard = 0; ptr && guard < 48; guard++) {
-        uint32_t hdr = pci_read32(d, ptr);
-        if ((hdr & 0xff) == 0x05) {
-            uint16_t ctl = (uint16_t)(hdr >> 16);
-            pci_write32(d, (uint8_t)(ptr + 4), 0xfee00000u | (cpus[0]->arch.lapic_id << 12));
-            if (ctl & 0x80) { /* 64-bit address */
-                pci_write32(d, (uint8_t)(ptr + 8), 0);
-                pci_write16(d, (uint8_t)(ptr + 12), vector);
-            } else {
-                pci_write16(d, (uint8_t)(ptr + 8), vector);
-            }
-            pci_write16(d, (uint8_t)(ptr + 2), (uint16_t)((ctl & ~0x70u) | 1)); /* one vector, enabled */
-            pci_write16(d, 0x04, pci_read16(d, 0x04) | 0x400);                 /* INTx off */
-            return true;
-        }
-        ptr = (hdr >> 8) & 0xfc;
-    }
-    return false;
-}
 
 static void add_node(const char *path, const struct vnode_ops *ops, uint32_t minor) {
     struct vnode *v = vnode_alloc(VN_CHR, 0666, ops);
@@ -1522,9 +1496,9 @@ static bool bring_up(struct pci_dev *pd) {
     if (iss && res.adc && !stream_init(&hda.in, false, 0, IN_TAG))
         hda.in.present = false;
 
-    hda.irq = enable_msi(pd, VEC_HDA);
+    hda.irq = pci_enable_msi(pd, VEC_HDA);
     if (hda.irq) {
-        idt_set_handler(VEC_HDA, hda_irq);
+        irq_set_handler(VEC_HDA, hda_irq);
         uint32_t mask = 1u << hda.out.index;
         if (hda.in.present)
             mask |= 1u << hda.in.index;

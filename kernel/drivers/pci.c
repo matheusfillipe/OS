@@ -129,18 +129,28 @@ void pci_enable(const struct pci_dev *d) {
     pci_write16(d, 0x04, cmd);
 }
 
-bool pci_route_irq(const struct pci_dev *d, uint8_t vector) {
-    if (!d->irq_pin || d->irq_line == 0 || d->irq_line >= 24)
+/* Message-signalled interrupts avoid the legacy INTx routing, which needs
+ * the ACPI _PRT tables we don't parse yet. */
+bool pci_enable_msi(const struct pci_dev *d, uint8_t vector) {
+    if (!(pci_read16(d, 0x06) & 0x10)) /* no capability list */
         return false;
-    /* Firmware programs the line register with the I/O APIC input it
-     * routed the pin to (PCI interrupts are level-triggered, active low).
-     * Lines below 16 are ISA numbers and may be remapped by an override. */
-    bool level = true, active_low = true;
-    uint32_t gsi = d->irq_line;
-    if (d->irq_line < 16) {
-        bool l, a;
-        gsi = irq_to_gsi(d->irq_line, &l, &a);
+    uint8_t ptr = pci_read32(d, 0x34) & 0xfc;
+    for (int guard = 0; ptr && guard < 48; guard++) {
+        uint32_t hdr = pci_read32(d, ptr);
+        if ((hdr & 0xff) == 0x05) {
+            uint16_t ctl = (uint16_t)(hdr >> 16);
+            pci_write32(d, (uint8_t)(ptr + 4), arch_msi_address());
+            if (ctl & 0x80) { /* 64-bit address */
+                pci_write32(d, (uint8_t)(ptr + 8), 0);
+                pci_write16(d, (uint8_t)(ptr + 12), vector);
+            } else {
+                pci_write16(d, (uint8_t)(ptr + 8), vector);
+            }
+            pci_write16(d, (uint8_t)(ptr + 2), (uint16_t)((ctl & ~0x70u) | 1)); /* one vector, enabled */
+            pci_write16(d, 0x04, pci_read16(d, 0x04) | 0x400);                 /* INTx off */
+            return true;
+        }
+        ptr = (hdr >> 8) & 0xfc;
     }
-    ioapic_route(gsi, vector, cpus[0]->arch.lapic_id, level, active_low);
-    return true;
+    return false;
 }

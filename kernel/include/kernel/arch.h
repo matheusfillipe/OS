@@ -30,6 +30,9 @@ _Static_assert(offsetof(struct cpu, arch.user_rsp) == 16, "syscall.S uses user_r
 extern struct cpu *cpus[MAX_CPUS];
 extern uint32_t cpu_count;
 
+/* Boot CPU setup, in kmain order: before memory management, then once the heap exists. */
+void arch_init_bsp(struct cpu *c);
+void arch_init_interrupts(struct cpu *c);
 void arch_selftest_breakpoint(void);
 
 void switch_context(uint64_t *save_sp, uint64_t new_sp);
@@ -45,6 +48,8 @@ bool arch_signal_setup(struct regs *r, const struct siginfo *si, uint64_t mask, 
 bool arch_signal_return(struct regs *r, uint64_t *mask);
 
 uint64_t arch_hwcap(void);
+
+void arch_send_resched(struct cpu *c);
 
 void arch_mmu_init(void);
 void arch_page_fault_init(void);

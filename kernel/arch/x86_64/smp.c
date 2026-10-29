@@ -9,6 +9,11 @@
 struct cpu *cpus[MAX_CPUS];
 uint32_t cpu_count = 1;
 
+void arch_send_resched(struct cpu *c) { lapic_send_ipi(c->arch.lapic_id, VEC_RESCHED); }
+
+/* Device interrupts all go to the boot CPU's local APIC. */
+uint32_t arch_msi_address(void) { return 0xfee00000u | (cpus[0]->arch.lapic_id << 12); }
+
 static void timer_irq(struct regs *r) {
     lapic_eoi();
     proc_account_tick(r); /* CPU times for /proc */

@@ -7,6 +7,7 @@
 #define VEC_TIMER    0x20
 #define VEC_RESCHED  0x21
 #define VEC_TLB      0x22
+#define VEC_HDA      0x2c
 #define VEC_SPURIOUS 0xff
 
 typedef void (*irq_handler_t)(struct regs *r);
@@ -14,6 +15,11 @@ typedef void (*irq_handler_t)(struct regs *r);
 void idt_init(void);
 void idt_load(void);
 void idt_set_handler(uint8_t vector, irq_handler_t handler);
+void lapic_eoi(void);
+
+static inline void irq_set_handler(uint8_t vector, irq_handler_t handler) { idt_set_handler(vector, handler); }
+static inline void irq_eoi(void) { lapic_eoi(); }
+uint32_t arch_msi_address(void);
 
 /* ACPI */
 void acpi_init(void);

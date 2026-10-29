@@ -39,7 +39,7 @@ static void kick_idle_cpu(void) {
     for (uint32_t i = 0; i < cpu_count; i++) {
         struct cpu *c = cpus[i];
         if (c && c != self && c->online && c->current == c->idle) {
-            lapic_send_ipi(c->arch.lapic_id, VEC_RESCHED);
+            arch_send_resched(c);
             return;
         }
     }
