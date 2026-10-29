@@ -1,5 +1,5 @@
 #include <kernel/arch.h>
-#include <kernel/cpu.h>
+#include <asm/io.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
 #include <kernel/proc.h>

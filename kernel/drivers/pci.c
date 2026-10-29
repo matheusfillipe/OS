@@ -1,5 +1,5 @@
+#include <asm/io.h>
 #include <kernel/arch.h>
-#include <kernel/cpu.h>
 #include <kernel/lib.h>
 #include <kernel/pci.h>
 
@@ -14,13 +14,6 @@ static int ndevs;
 
 static uint32_t cfg_addr(uint8_t bus, uint8_t dev, uint8_t fn, uint8_t off) {
     return 0x80000000u | ((uint32_t)bus << 16) | ((uint32_t)dev << 11) | ((uint32_t)fn << 8) | (off & 0xfc);
-}
-
-static inline void outl(uint16_t port, uint32_t v) { __asm__ volatile("outl %0, %1" ::"a"(v), "Nd"(port)); }
-static inline uint32_t inl(uint16_t port) {
-    uint32_t v;
-    __asm__ volatile("inl %1, %0" : "=a"(v) : "Nd"(port));
-    return v;
 }
 
 static uint32_t raw_read(uint8_t bus, uint8_t dev, uint8_t fn, uint8_t off) {

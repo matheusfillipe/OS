@@ -1,7 +1,7 @@
+#include <asm/io.h>
 #include <kernel/arch.h>
 #include <kernel/blkdev.h>
 #include <kernel/boot.h>
-#include <kernel/cpu.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
 #include <kernel/pci.h>
@@ -88,18 +88,6 @@ struct vblk {
     uint64_t hdr_phys;
     bool can_flush;
 };
-
-static inline uint32_t inl(uint16_t port) {
-    uint32_t v;
-    __asm__ volatile("inl %1, %0" : "=a"(v) : "Nd"(port));
-    return v;
-}
-static inline void outl(uint16_t port, uint32_t v) { __asm__ volatile("outl %0, %1" ::"a"(v), "Nd"(port)); }
-static inline uint16_t inw(uint16_t port) {
-    uint16_t v;
-    __asm__ volatile("inw %1, %0" : "=a"(v) : "Nd"(port));
-    return v;
-}
 
 static uint64_t config64(struct vblk *v, uint16_t off) {
     return (uint64_t)inl((uint16_t)(v->io + VP_CONFIG + off)) |

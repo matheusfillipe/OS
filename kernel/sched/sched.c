@@ -13,7 +13,6 @@
  * have not been saved yet. Per-CPU queues with work stealing come later. */
 
 #define KSTACK_SIZE (32 * 1024)
-#define MSR_FS_BASE 0xC0000100
 
 void switch_context(uint64_t *save_rsp, uint64_t new_rsp);
 void thread_start_trampoline(void);

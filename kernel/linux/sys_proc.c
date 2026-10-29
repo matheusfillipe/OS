@@ -5,7 +5,6 @@
 #include <kernel/vfs.h>
 #include <linux/syscall.h>
 
-#define MSR_FS_BASE 0xC0000100
 #define MAX_EXEC_STRINGS 1024
 
 /* ---- fork / clone ---- */

@@ -1,4 +1,4 @@
-#include <kernel/cpu.h>
+#include <asm/io.h>
 #include <kernel/lib.h>
 #include <kernel/pci.h>
 
@@ -30,15 +30,9 @@ enum {
 #define DISPI_ENABLED     0x01
 #define DISPI_LFB_ENABLED 0x40
 
-static inline uint16_t inw_port(uint16_t port) {
-    uint16_t v;
-    __asm__ volatile("inw %1, %0" : "=a"(v) : "Nd"(port));
-    return v;
-}
-
 static uint16_t dispi_read(uint16_t index) {
     outw(DISPI_INDEX, index);
-    return inw_port(DISPI_DATA);
+    return inw(DISPI_DATA);
 }
 
 static void dispi_write(uint16_t index, uint16_t v) {

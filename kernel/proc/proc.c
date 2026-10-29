@@ -6,8 +6,6 @@
 #include <kernel/proc.h>
 #include <kernel/vfs.h>
 
-#define MSR_FS_BASE 0xC0000100
-
 static struct process kernel_proc = {.pid = 0, .name = "kernel"};
 static struct process *all_procs; /* linked through next_all */
 static spinlock_t proc_lock = SPINLOCK_INIT;

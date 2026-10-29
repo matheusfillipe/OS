@@ -8,7 +8,6 @@
 /* execve: ELF64 executables (static, static-pie, or dynamic with an
  * interpreter such as ld-musl / ld-linux) and #! scripts. */
 
-#define MSR_FS_BASE 0xC0000100
 #define PIE_BASE    0x0000555555554000ULL
 #define MAX_ARGS    1024
 #define MAX_SHEBANG 4
