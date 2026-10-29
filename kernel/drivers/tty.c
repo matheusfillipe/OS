@@ -268,7 +268,7 @@ void tty_init(void) {
     vfs_create_node("/dev/tty", v);
     vnode_put(v);
 
-    serial_rx_irq_init(serial_rx);
+    platform_console_rx_init(serial_rx);
 }
 
 /* ---- the simple character devices ---- */
@@ -316,7 +316,7 @@ static int64_t random_read(struct vnode *v, struct file *f, void *buf, size_t le
 
 static int64_t hostclip_read(struct vnode *v, struct file *f, void *buf, size_t len, uint64_t off) {
     (void)v, (void)f, (void)off;
-    return com2_read(buf, len);
+    return platform_hostlink_read(buf, len);
 }
 
 static const struct vnode_ops null_ops = {.read = null_read, .write = sink_write};
@@ -346,8 +346,8 @@ void devfs_init(void) {
     add_dev("/dev/full", &full_ops, 1, 7);
     add_dev("/dev/random", &random_ops, 1, 8);
     add_dev("/dev/urandom", &random_ops, 1, 9);
-    if (com2_init())
-        add_dev("/dev/hostclip", &hostclip_ops, 4, 65); /* COM2 */
+    if (platform_hostlink_init())
+        add_dev("/dev/hostclip", &hostclip_ops, 4, 65);
     tty_init();
     pty_init();
 }

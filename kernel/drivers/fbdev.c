@@ -2,10 +2,10 @@
 #include <kernel/drivers.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
+#include <kernel/platform.h>
 #include <kernel/proc.h>
 #include <kernel/vfs.h>
 
-#include <kernel/bga.h>
 
 /* /dev/fb0 with the Linux fbdev interface (FBIOGET_VSCREENINFO,
  * FBIOGET_FSCREENINFO, mmap). The desktop draws into it directly; once a
@@ -64,12 +64,12 @@ static int64_t put_var(uint64_t arg) {
     if (copy_from_user(&s, arg, sizeof s) < 0)
         return -EFAULT;
     if (s.xres != fb_w || s.yres != fb_h) {
-        if ((s.bits_per_pixel && s.bits_per_pixel != 32) || fb->bpp != 32 || !bga_mode_fits(s.xres, s.yres))
+        if ((s.bits_per_pixel && s.bits_per_pixel != 32) || fb->bpp != 32 || !platform_fb_mode_fits(s.xres, s.yres))
             return -EINVAL;
         if ((s.activate & 0xf) == FB_ACTIVATE_TEST)
             return 0;
         uint64_t phys, vram;
-        if (!bga_probe(&phys, &vram) || !bga_set_mode(s.xres, s.yres))
+        if (!platform_fb_set_mode(s.xres, s.yres, &phys, &vram))
             return -EINVAL;
         fb_w = s.xres, fb_h = s.yres, fb_pitch = s.xres * 4;
         fb_phys = phys;

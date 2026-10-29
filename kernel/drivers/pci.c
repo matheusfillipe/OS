@@ -1,33 +1,15 @@
-#include <asm/io.h>
 #include <kernel/arch.h>
 #include <kernel/lib.h>
 #include <kernel/pci.h>
-
-/* PCI configuration access through the legacy 0xCF8/0xCFC ports, which every
- * x86 PC still provides. ECAM (MCFG) access replaces it for PCIe extended
- * config space when a driver needs it. */
+#include <kernel/platform.h>
 
 #define MAX_PCI 128
 
 static struct pci_dev devs[MAX_PCI];
 static int ndevs;
 
-static uint32_t cfg_addr(uint8_t bus, uint8_t dev, uint8_t fn, uint8_t off) {
-    return 0x80000000u | ((uint32_t)bus << 16) | ((uint32_t)dev << 11) | ((uint32_t)fn << 8) | (off & 0xfc);
-}
-
-static uint32_t raw_read(uint8_t bus, uint8_t dev, uint8_t fn, uint8_t off) {
-    outl(0xcf8, cfg_addr(bus, dev, fn, off));
-    return inl(0xcfc);
-}
-
-static void raw_write(uint8_t bus, uint8_t dev, uint8_t fn, uint8_t off, uint32_t v) {
-    outl(0xcf8, cfg_addr(bus, dev, fn, off));
-    outl(0xcfc, v);
-}
-
-uint32_t pci_read32(const struct pci_dev *d, uint8_t off) { return raw_read(d->bus, d->dev, d->fn, off); }
-void pci_write32(const struct pci_dev *d, uint8_t off, uint32_t v) { raw_write(d->bus, d->dev, d->fn, off, v); }
+uint32_t pci_read32(const struct pci_dev *d, uint8_t off) { return platform_pci_cfg_read32(d->bus, d->dev, d->fn, off); }
+void pci_write32(const struct pci_dev *d, uint8_t off, uint32_t v) { platform_pci_cfg_write32(d->bus, d->dev, d->fn, off, v); }
 
 uint16_t pci_read16(const struct pci_dev *d, uint8_t off) {
     return (uint16_t)(pci_read32(d, off & ~3) >> ((off & 2) * 8));
@@ -73,7 +55,7 @@ static void probe_bars(struct pci_dev *d) {
 }
 
 static void scan_fn(uint8_t bus, uint8_t dev, uint8_t fn) {
-    uint32_t id = raw_read(bus, dev, fn, 0);
+    uint32_t id = platform_pci_cfg_read32(bus, dev, fn, 0);
     if ((id & 0xffff) == 0xffff || ndevs == MAX_PCI)
         return;
     struct pci_dev *d = &devs[ndevs++];
@@ -81,14 +63,14 @@ static void scan_fn(uint8_t bus, uint8_t dev, uint8_t fn) {
     d->bus = bus, d->dev = dev, d->fn = fn;
     d->vendor = id & 0xffff;
     d->device = id >> 16;
-    uint32_t cls = raw_read(bus, dev, fn, 0x08);
+    uint32_t cls = platform_pci_cfg_read32(bus, dev, fn, 0x08);
     d->class_code = cls >> 24;
     d->subclass = (cls >> 16) & 0xff;
     d->prog_if = (cls >> 8) & 0xff;
-    uint32_t irq = raw_read(bus, dev, fn, 0x3c);
+    uint32_t irq = platform_pci_cfg_read32(bus, dev, fn, 0x3c);
     d->irq_line = irq & 0xff;
     d->irq_pin = (irq >> 8) & 0xff;
-    uint8_t header = (raw_read(bus, dev, fn, 0x0c) >> 16) & 0x7f;
+    uint8_t header = (platform_pci_cfg_read32(bus, dev, fn, 0x0c) >> 16) & 0x7f;
     if (header == 0)
         probe_bars(d);
 }
@@ -96,10 +78,10 @@ static void scan_fn(uint8_t bus, uint8_t dev, uint8_t fn) {
 void pci_init(void) {
     for (int bus = 0; bus < 256; bus++) {
         for (int dev = 0; dev < 32; dev++) {
-            uint32_t id = raw_read((uint8_t)bus, (uint8_t)dev, 0, 0);
+            uint32_t id = platform_pci_cfg_read32((uint8_t)bus, (uint8_t)dev, 0, 0);
             if ((id & 0xffff) == 0xffff)
                 continue;
-            bool multi = (raw_read((uint8_t)bus, (uint8_t)dev, 0, 0x0c) >> 16) & 0x80;
+            bool multi = (platform_pci_cfg_read32((uint8_t)bus, (uint8_t)dev, 0, 0x0c) >> 16) & 0x80;
             for (int fn = 0; fn < (multi ? 8 : 1); fn++)
                 scan_fn((uint8_t)bus, (uint8_t)dev, (uint8_t)fn);
         }

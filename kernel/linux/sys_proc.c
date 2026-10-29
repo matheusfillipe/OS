@@ -185,8 +185,7 @@ SYSCALL(vfork) {
 
 SYSCALL(clone) {
     UNUSED_ARGS();
-    /* x86-64 argument order: flags, newsp, parent_tid, child_tid, tls */
-    return do_clone(a1, a2, a3, a4, a5);
+    return do_clone(CLONE_ARGS(a1, a2, a3, a4, a5));
 }
 
 /* clone3 (newer glibc's pthread_create and posix_spawn): the same thing,

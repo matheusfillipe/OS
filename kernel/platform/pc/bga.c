@@ -1,8 +1,7 @@
 #include <asm/io.h>
 #include <kernel/lib.h>
 #include <kernel/pci.h>
-
-#include <kernel/bga.h>
+#include <kernel/platform.h>
 
 /* Bochs/QEMU "std VGA" (PCI 1234:1111) mode setting through its dispi
  * registers (index on I/O port 0x1CE, data on 0x1CF). The firmware already
@@ -43,7 +42,7 @@ static void dispi_write(uint16_t index, uint16_t v) {
 static int state = -1; /* -1 not probed, 0 absent, 1 present */
 static uint64_t lfb_phys, vram;
 
-bool bga_probe(uint64_t *phys, uint64_t *vram_bytes) {
+static bool bga_probe(uint64_t *phys, uint64_t *vram_bytes) {
     if (state < 0) {
         state = 0;
         struct pci_dev *d = pci_find(0x1234, 0x1111);
@@ -66,15 +65,15 @@ bool bga_probe(uint64_t *phys, uint64_t *vram_bytes) {
     return state == 1;
 }
 
-bool bga_mode_fits(uint32_t w, uint32_t h) {
+bool platform_fb_mode_fits(uint32_t w, uint32_t h) {
     if (!bga_probe(NULL, NULL))
         return false;
     /* within what the device accepts, and in its memory */
     return w >= 320 && h >= 200 && w <= 2560 && h <= 1600 && (w % 8) == 0 && (uint64_t)w * h * 4 <= vram;
 }
 
-bool bga_set_mode(uint32_t w, uint32_t h) {
-    if (!bga_mode_fits(w, h))
+bool platform_fb_set_mode(uint32_t w, uint32_t h, uint64_t *phys, uint64_t *vram_bytes) {
+    if (!platform_fb_mode_fits(w, h) || !bga_probe(phys, vram_bytes))
         return false;
     dispi_write(DISPI_ENABLE, 0);
     dispi_write(DISPI_XRES, (uint16_t)w);

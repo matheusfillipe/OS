@@ -111,5 +111,5 @@ void input_init(void) {
     vfs_mkdir_p("/dev/input", 0755);
     add_dev("/dev/input/event0", &input_kbd);
     add_dev("/dev/input/event1", &input_mouse);
-    i8042_init();
+    platform_input_init();
 }

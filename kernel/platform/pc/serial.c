@@ -1,7 +1,6 @@
 #include "isa.h"
 #include <asm/io.h>
 #include <kernel/arch.h>
-#include <kernel/drivers.h>
 #include <kernel/platform.h>
 
 #define COM1 0x3f8
@@ -24,7 +23,7 @@ static bool uart_init(uint16_t port, uint8_t loopback_byte) {
     return true;
 }
 
-bool serial_init(void) { return present = uart_init(COM1, 0xae); }
+bool platform_console_init(void) { return present = uart_init(COM1, 0xae); }
 
 static void serial_putc(char c) {
     for (int spins = 0; spins < 100000 && !(inb(COM1 + 5) & 0x20); spins++)
@@ -32,7 +31,7 @@ static void serial_putc(char c) {
     outb(COM1, (uint8_t)c);
 }
 
-void serial_write(const char *s, uint64_t len) {
+void platform_console_write(const char *s, uint64_t len) {
     if (!present)
         return;
     for (uint64_t i = 0; i < len; i++) {
@@ -51,7 +50,7 @@ static void com1_irq(struct regs *r) {
     lapic_eoi();
 }
 
-void serial_rx_irq_init(void (*rx)(char c)) {
+void platform_console_rx_init(void (*rx)(char c)) {
     rx_callback = rx;
     idt_set_handler(VEC_COM1, com1_irq);
     isa_irq_route(4, VEC_COM1);
@@ -71,12 +70,12 @@ static bool com2_present;
  * for the reader: draining it here in a tight loop is exactly the
  * pattern that, under some hypervisors (Windows' WHPX), keeps QEMU's
  * own thread from running and freezes its window. */
-bool com2_init(void) { return com2_present = uart_init(COM2, 0x5a); }
+bool platform_hostlink_init(void) { return com2_present = uart_init(COM2, 0x5a); }
 
 /* Non-blocking: returns what has arrived (0 if nothing). Every port access
  * is a VM exit, so it reads only what is ready, a FIFO's worth at a time,
  * and never waits: the shell calls it every frame anyway. */
-int64_t com2_read(void *buf, uint64_t len) {
+int64_t platform_hostlink_read(void *buf, uint64_t len) {
     if (!com2_present)
         return 0;
     uint8_t *b = buf;

@@ -205,7 +205,7 @@ static void i8042_irq(struct regs *r) {
     lapic_eoi();
 }
 
-void i8042_init(void) {
+void platform_input_init(void) {
     /* Quiet both ports, flush, enable the aux port and both interrupts,
      * keep translation. The flush is bounded: under Windows' hypervisor a
      * mouse moving over the window keeps the queue filling, and an endless

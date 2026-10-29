@@ -1,7 +1,8 @@
 #pragma once
-/* Linux x86-64 user ABI: the constants and structure layouts that user
- * programs (musl, glibc, busybox, ...) were compiled against. Values must
- * match Linux exactly; they come from the Linux UAPI headers' definitions. */
+/* Linux user ABI shared by every architecture: the constants and structure
+ * layouts that user programs (musl, glibc, busybox, ...) were compiled against.
+ * Values must match Linux exactly; they come from the Linux UAPI headers'
+ * definitions. What differs per architecture lives in <asm/uapi.h>. */
 #include <stdint.h>
 
 /* errno */
@@ -55,8 +56,6 @@
 #define O_TRUNC 01000
 #define O_APPEND 02000
 #define O_NONBLOCK 04000
-#define O_DIRECTORY 0200000
-#define O_NOFOLLOW 0400000
 #define O_CLOEXEC 02000000
 #define O_PATH 010000000
 
@@ -188,7 +187,6 @@
 #define SA_RESTART 0x10000000
 #define SA_NODEFER 0x40000000
 #define SA_RESETHAND 0x80000000
-#define SA_RESTORER 0x04000000
 #define SIG_BLOCK 0
 #define SIG_UNBLOCK 1
 #define SIG_SETMASK 2
@@ -230,11 +228,6 @@ struct siginfo {
 #define EPOLLWAKEUP (1u << 29)
 #define EPOLLONESHOT (1u << 30)
 #define EPOLLET (1u << 31)
-
-struct linux_epoll_event {
-    uint32_t events;
-    uint64_t data;
-} __attribute__((packed));
 
 /* eventfd, timerfd, signalfd, memfd */
 #define EFD_SEMAPHORE 1
@@ -318,23 +311,7 @@ struct linux_itimerspec {
     struct linux_timespec value;
 };
 
-struct linux_stat {
-    uint64_t st_dev;
-    uint64_t st_ino;
-    uint64_t st_nlink;
-    uint32_t st_mode;
-    uint32_t st_uid;
-    uint32_t st_gid;
-    uint32_t __pad0;
-    uint64_t st_rdev;
-    int64_t st_size;
-    int64_t st_blksize;
-    int64_t st_blocks;
-    struct linux_timespec st_atim;
-    struct linux_timespec st_mtim;
-    struct linux_timespec st_ctim;
-    int64_t __unused[3];
-};
+#include <asm/uapi.h>
 
 struct linux_statx_timestamp {
     int64_t tv_sec;
@@ -404,13 +381,6 @@ struct linux_termios2 {
 
 struct linux_winsize {
     uint16_t ws_row, ws_col, ws_xpixel, ws_ypixel;
-};
-
-struct linux_sigaction {
-    uint64_t handler;
-    uint64_t flags;
-    uint64_t restorer;
-    uint64_t mask;
 };
 
 struct linux_rlimit {

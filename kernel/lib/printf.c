@@ -123,7 +123,7 @@ int ksnprintf(char *buf, size_t size, const char *fmt, ...) {
 }
 
 static void log_write(const char *s, size_t len) {
-    serial_write(s, len);
+    platform_console_write(s, len);
     fbcon_write(s, len);
 }
 
