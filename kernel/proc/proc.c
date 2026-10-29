@@ -670,39 +670,36 @@ int64_t proc_wait(int pid, int *status, int options) {
 
 static bool debug_trace;
 
-static void page_fault(struct regs *r) {
-    uint64_t addr = read_cr2();
+/* Called by the arch page-fault handler. Returns false for a kernel-mode
+ * fault nothing resolves, which the arch reports with its own fault details. */
+bool page_fault(struct regs *r, uint64_t addr, bool write, bool exec);
+bool page_fault(struct regs *r, uint64_t addr, bool write, bool exec) {
     if (debug_trace)
-        kprintf("#PF addr=%lx rip=%lx err=%lx\n", addr, r->rip, r->error);
+        kprintf("#PF addr=%lx rip=%lx\n", addr, regs_ip(r));
     struct thread *t = thread_current();
     struct mm *mm = t && t->user ? t->user->proc->mm : NULL;
-    if (mm && mm_handle_fault(mm, addr, r->error & 2, r->error & 16))
-        return;
-    if (r->cs & 3) {
+    if (mm && mm_handle_fault(mm, addr, write, exec))
+        return true;
+    if (regs_user_mode(r)) {
         kprintf("pid %d (%s): segmentation fault at %lx, rip %lx\n", t->user->proc->pid, t->user->proc->name,
-                addr, r->rip);
+                addr, regs_ip(r));
         proc_exit(SIGSEGV);
     }
     /* A user-memory access from the kernel (copy_from_user and friends):
      * resume at its fixup, which returns -EFAULT. */
-    uint64_t fixup = exception_fixup(r->rip);
+    uint64_t fixup = exception_fixup(regs_ip(r));
     if (fixup) {
-        r->rip = fixup;
-        return;
+        regs_set_ip(r, fixup);
+        return true;
     }
-    kprintf("\nkernel page fault at %lx, rip %lx, error %lx\n", addr, r->rip, r->error);
-    panic("page fault in kernel mode");
+    return false;
 }
 
-/* Called by isr_dispatch for CPU exceptions raised in user mode. */
-void user_exception(struct regs *r);
-void user_exception(struct regs *r) {
+/* Called by the arch for CPU exceptions raised in user mode. */
+void user_exception(struct regs *r, uint64_t vector, int sig);
+void user_exception(struct regs *r, uint64_t vector, int sig) {
     struct process *p = proc_current();
-    int sig = r->vector == 0 || r->vector == 16 || r->vector == 19 ? SIGFPE
-              : r->vector == 6                                     ? SIGILL
-              : r->vector == 3 || r->vector == 1                   ? SIGTRAP
-                                                                   : SIGSEGV;
-    kprintf("pid %d (%s): exception %lu at rip %lx -> signal %d\n", p->pid, p->name, r->vector, r->rip, sig);
+    kprintf("pid %d (%s): exception %lu at rip %lx -> signal %d\n", p->pid, p->name, vector, regs_ip(r), sig);
     proc_exit(sig);
 }
 
@@ -785,7 +782,7 @@ void proc_start_init(const char *path) {
     fs_context(&kernel_proc.root, &kernel_proc.cwd); /* the first namespace's root */
     kernel_proc.mntns = proc_first_mntns();
     ns_init(&kernel_proc.ns);
-    idt_set_handler(14, page_fault);
+    arch_page_fault_init();
     init_path = path;
 
     struct process *p = proc_alloc(NULL);

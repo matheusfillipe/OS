@@ -6,7 +6,7 @@
 
 /* User address spaces: a sorted VMA list plus page tables whose upper half
  * is shared with the kernel. Pages are allocated on first touch (demand
- * zero). fork shares private pages copy-on-write (PTE_COW: read-only in
+ * zero). fork shares private pages copy-on-write (PG_COW: read-only in
  * both; the first write takes a copy, break_cow); shared mappings
  * (VMA_SHARED) map a pageobj's pages, which fork shares as they are. Walks
  * skip absent page tables whole (pte_find), so huge reserved ranges cost
@@ -21,11 +21,11 @@
  *   VMA_PHYS: device memory, never freed. */
 
 static uint64_t pte_flags_for(uint32_t prot) {
-    uint64_t f = PTE_PRESENT | PTE_USER;
+    uint64_t f = PG_USER;
     if (prot & PROT_WRITE)
-        f |= PTE_WRITE;
-    if (!(prot & PROT_EXEC))
-        f |= PTE_NX;
+        f |= PG_WRITE;
+    if (prot & PROT_EXEC)
+        f |= PG_EXEC;
     return f;
 }
 
@@ -38,49 +38,50 @@ struct mm *mm_create(void) {
         kfree(mm);
         return NULL;
     }
-    mm->pml4 = phys_to_virt(phys);
-    memset(mm->pml4, 0, PAGE_SIZE / 2);
-    memcpy(mm->pml4 + 256, vmm_kernel_pml4() + 256, PAGE_SIZE / 2);
+    mm->pgd = phys_to_virt(phys);
+    memset(mm->pgd, 0, PAGE_SIZE / 2);
+    memcpy(mm->pgd + 256, vmm_kernel_pgd() + 256, PAGE_SIZE / 2);
     mm->refcount = 1;
     mm->mmap_hint = USER_MMAP_BASE;
     return mm;
 }
 
-/* active_mm is published before CR3 is loaded (tlb_shootdown relies on the
- * order). Interrupts stay off so CR3 and active_mm change on the same CPU. */
+/* active_mm is published before the root is loaded (tlb_shootdown relies on
+ * the order). Interrupts stay off so the root and active_mm change on the
+ * same CPU. */
 void mm_activate(struct mm *mm) {
-    uint64_t phys = virt_to_phys_hhdm(mm->pml4);
+    uint64_t phys = virt_to_phys_hhdm(mm->pgd);
     uint64_t f = irq_save();
     __atomic_store_n(&this_cpu()->active_mm, mm, __ATOMIC_SEQ_CST);
-    if (read_cr3() != phys)
-        write_cr3(phys);
+    if (arch_current_root() != phys)
+        arch_load_root(phys);
     irq_restore(f);
 }
 
 void mm_activate_kernel(void) {
-    uint64_t kphys = virt_to_phys_hhdm(vmm_kernel_pml4());
+    uint64_t kphys = virt_to_phys_hhdm(vmm_kernel_pgd());
     uint64_t f = irq_save();
-    if (read_cr3() != kphys)
-        write_cr3(kphys);
+    if (arch_current_root() != kphys)
+        arch_load_root(kphys);
     __atomic_store_n(&this_cpu()->active_mm, NULL, __ATOMIC_SEQ_CST);
     irq_restore(f);
 }
 
 /* Returns the PTE slot for `va`, creating tables if `create`. */
 static uint64_t *pte_slot(struct mm *mm, uint64_t va, bool create) {
-    uint64_t *table = mm->pml4;
+    uint64_t *table = mm->pgd;
     for (int level = 4; level > 1; level--) {
         uint64_t idx = (va >> (12 + 9 * (level - 1))) & 0x1ff;
-        if (!(table[idx] & PTE_PRESENT)) {
+        if (!pte_present(table[idx])) {
             if (!create)
                 return NULL;
             uint64_t p = pmm_alloc(1);
             if (!p)
                 return NULL;
             memset(phys_to_virt(p), 0, PAGE_SIZE);
-            table[idx] = p | PTE_PRESENT | PTE_WRITE | PTE_USER;
+            table[idx] = pte_table(p, true);
         }
-        table = phys_to_virt(table[idx] & PTE_ADDR);
+        table = phys_to_virt(pte_phys(table[idx]));
     }
     return &table[(va >> 12) & 0x1ff];
 }
@@ -89,15 +90,15 @@ static uint64_t *pte_slot(struct mm *mm, uint64_t va, bool create) {
  * *span the size of the empty region around `va` that holds no pages at all
  * (so walks over huge reserved ranges skip them whole, not page by page). */
 static uint64_t *pte_find(struct mm *mm, uint64_t va, uint64_t *span) {
-    uint64_t *table = mm->pml4;
+    uint64_t *table = mm->pgd;
     for (int level = 4; level > 1; level--) {
         uint64_t shift = 12 + 9 * (uint64_t)(level - 1);
         uint64_t idx = (va >> shift) & 0x1ff;
-        if (!(table[idx] & PTE_PRESENT)) {
+        if (!pte_present(table[idx])) {
             *span = 1ULL << shift;
             return NULL;
         }
-        table = phys_to_virt(table[idx] & PTE_ADDR);
+        table = phys_to_virt(pte_phys(table[idx]));
     }
     *span = PAGE_SIZE;
     return &table[(va >> 12) & 0x1ff];
@@ -109,19 +110,19 @@ static inline uint64_t walk_next(uint64_t va, uint64_t span) { return ALIGN_DOWN
 /* A write to a copy-on-write page (shared since fork): it becomes this
  * address space's own, a copy if anyone else still has it. Lock held. */
 static bool break_cow(struct mm *mm, struct vma *v, uint64_t va, uint64_t *pte) {
-    uint64_t old = *pte & PTE_ADDR;
+    uint64_t old = pte_phys(*pte);
     if (page_refcount(old) > 1) {
         uint64_t p = page_alloc_shared(); /* counted: it may be shared by a later fork */
         if (!p)
             return false;
         memcpy(phys_to_virt(p), phys_to_virt(old), PAGE_SIZE);
-        *pte = p | pte_flags_for(v->prot);
-        invlpg(va);
+        *pte = pte_make(p, pte_flags_for(v->prot));
+        arch_tlb_flush_page(va);
         tlb_shootdown(mm); /* other threads must stop reading the old page */
         page_unref(old);   /* the other side keeps it */
     } else {
-        *pte = old | pte_flags_for(v->prot); /* the last one: just ours again */
-        invlpg(va);
+        *pte = pte_make(old, pte_flags_for(v->prot)); /* the last one: just ours again */
+        arch_tlb_flush_page(va);
     }
     return true;
 }
@@ -191,19 +192,19 @@ void mm_set_name(struct mm *mm, uint64_t start, uint64_t end, struct vma_name *n
 static uint64_t count_present(uint64_t *table, int level) {
     uint64_t n = 0;
     for (int i = 0; i < (level == 4 ? 256 : 512); i++) {
-        if (!(table[i] & PTE_PRESENT))
+        if (!pte_present(table[i]))
             continue;
         if (level == 1)
             n++;
         else
-            n += count_present(phys_to_virt(table[i] & PTE_ADDR), level - 1);
+            n += count_present(phys_to_virt(pte_phys(table[i])), level - 1);
     }
     return n;
 }
 
 uint64_t mm_rss_pages(struct mm *mm) {
     uint64_t f = spin_lock_irqsave(&mm->lock);
-    uint64_t n = count_present(mm->pml4, 4);
+    uint64_t n = count_present(mm->pgd, 4);
     spin_unlock_irqrestore(&mm->lock, f);
     return n;
 }
@@ -243,11 +244,11 @@ static void zap_locked(struct mm *mm, struct vma *v, uint64_t s, uint64_t e, str
     uint64_t span;
     for (uint64_t va = s; va < e; va = walk_next(va, span)) {
         uint64_t *pte = pte_find(mm, va, &span);
-        if (!pte || !(*pte & PTE_PRESENT))
+        if (!pte || !pte_present(*pte))
             continue;
-        uint64_t phys = *pte & PTE_ADDR;
+        uint64_t phys = pte_phys(*pte);
         *pte = 0;
-        invlpg(va);
+        arch_tlb_flush_page(va);
         b->changed = true;
         if (v->flags & VMA_PHYS)
             continue;
@@ -334,7 +335,7 @@ int mm_map_phys(struct mm *mm, uint64_t start, uint64_t end, uint32_t prot, uint
             r = -ENOMEM;
             break;
         }
-        *pte = (phys & PTE_ADDR) | pte_flags_for(prot) | PTE_PWT; /* PAT PA1 = write-combining */
+        *pte = pte_make(phys, pte_flags_for(prot) | PG_WC);
     }
     spin_unlock_irqrestore(&mm->lock, f);
     return r;
@@ -381,12 +382,12 @@ int mm_protect(struct mm *mm, uint64_t start, uint64_t end, uint32_t prot) {
     uint64_t span;
     for (uint64_t va = start; va < end; va = walk_next(va, span)) {
         uint64_t *pte = pte_find(mm, va, &span);
-        if (pte && (*pte & PTE_PRESENT)) {
-            uint64_t flags = pte_flags_for(prot) | (*pte & (PTE_PWT | PTE_COW));
-            if (flags & PTE_COW)
-                flags &= ~PTE_WRITE; /* still shared: the first write copies it */
-            *pte = (*pte & PTE_ADDR) | flags;
-            invlpg(va);
+        if (pte && pte_present(*pte)) {
+            uint64_t flags = pte_flags_for(prot) | (pte_flags(*pte) & (PG_WC | PG_COW));
+            if (flags & PG_COW)
+                flags &= ~PG_WRITE; /* still shared: the first write copies it */
+            *pte = pte_make(pte_phys(*pte), flags);
+            arch_tlb_flush_page(va);
             changed = true;
         }
     }
@@ -493,7 +494,7 @@ static int64_t move_locked(struct mm *mm, struct vma *v, uint64_t old, uint64_t 
      * cannot leave the move half done. */
     for (uint64_t o = 0; o < old_len; o += PAGE_SIZE) {
         uint64_t *spte = pte_slot(mm, old + o, false);
-        if (spte && (*spte & PTE_PRESENT) && !pte_slot(mm, dst + o, true))
+        if (spte && pte_present(*spte) && !pte_slot(mm, dst + o, true))
             return -ENOMEM;
     }
     struct vma *nv = vma_dup(v);
@@ -505,11 +506,11 @@ static int64_t move_locked(struct mm *mm, struct vma *v, uint64_t old, uint64_t 
     bool moved = false;
     for (uint64_t o = 0; o < old_len; o += PAGE_SIZE) {
         uint64_t *spte = pte_slot(mm, old + o, false);
-        if (!spte || !(*spte & PTE_PRESENT))
+        if (!spte || !pte_present(*spte))
             continue;
         *pte_slot(mm, dst + o, false) = *spte;
         *spte = 0;
-        invlpg(old + o);
+        arch_tlb_flush_page(old + o);
         moved = true;
     }
     /* Another thread may still reach the pages through the old addresses
@@ -584,7 +585,7 @@ static uint64_t *fault_in(struct mm *mm, struct vma *v, uint64_t va) {
     uint64_t *pte = pte_slot(mm, va, true);
     if (!pte)
         return NULL;
-    if (*pte & PTE_PRESENT)
+    if (pte_present(*pte))
         return pte;
     uint64_t p;
     if (v->flags & VMA_SHARED) {
@@ -599,7 +600,7 @@ static uint64_t *fault_in(struct mm *mm, struct vma *v, uint64_t va) {
     }
     if (!p)
         return NULL;
-    *pte = p | pte_flags_for(v->prot);
+    *pte = pte_make(p, pte_flags_for(v->prot));
     return pte;
 }
 
@@ -612,16 +613,17 @@ bool mm_handle_fault(struct mm *mm, uint64_t addr, bool write, bool exec) {
               (v->prot & (PROT_READ | PROT_WRITE | PROT_EXEC));
     if (ok) {
         uint64_t *pte = pte_slot(mm, ALIGN_DOWN(addr, PAGE_SIZE), false);
-        if (pte && (*pte & PTE_PRESENT) && write && (*pte & PTE_COW)) {
+        if (pte && pte_present(*pte) && write && (pte_flags(*pte) & PG_COW)) {
             ok = break_cow(mm, v, ALIGN_DOWN(addr, PAGE_SIZE), pte);
-        } else if (pte && (*pte & PTE_PRESENT)) {
+        } else if (pte && pte_present(*pte)) {
             /* Present but faulted: either a real protection violation, or
              * this CPU used a stale TLB entry while another thread's mprotect
              * was widening the page (before its shootdown reached us). In
              * the latter case the PTE already allows the access: retry. */
-            ok = (!write || (*pte & PTE_WRITE)) && (!exec || !(*pte & PTE_NX));
+            uint64_t pg = pte_flags(*pte);
+            ok = (!write || (pg & PG_WRITE)) && (!exec || (pg & PG_EXEC));
             if (ok)
-                invlpg(ALIGN_DOWN(addr, PAGE_SIZE));
+                arch_tlb_flush_page(ALIGN_DOWN(addr, PAGE_SIZE));
         } else
             ok = fault_in(mm, v, ALIGN_DOWN(addr, PAGE_SIZE)) != NULL;
     }
@@ -640,9 +642,9 @@ static int copy_pages(struct mm *mm, uint64_t dst, const void *src, size_t len) 
         uint64_t *pte = fault_in(mm, v, page);
         if (!pte)
             return -ENOMEM;
-        if ((*pte & PTE_COW) && !break_cow(mm, v, page, pte)) /* written below, through the kernel's view */
+        if ((pte_flags(*pte) & PG_COW) && !break_cow(mm, v, page, pte)) /* written below, through the kernel's view */
             return -ENOMEM;
-        uint8_t *kva = (uint8_t *)phys_to_virt(*pte & PTE_ADDR) + off;
+        uint8_t *kva = (uint8_t *)phys_to_virt(pte_phys(*pte)) + off;
         if (s)
             memcpy(kva, s, n);
         else
@@ -683,7 +685,7 @@ struct mm *mm_clone(struct mm *src) {
         uint64_t span;
         for (uint64_t va = v->start; va < v->end; va = walk_next(va, span)) {
             uint64_t *spte = pte_find(src, va, &span);
-            if (!spte || !(*spte & PTE_PRESENT))
+            if (!spte || !pte_present(*spte))
                 continue;
             uint64_t *dpte = pte_slot(mm, va, true);
             if (!dpte)
@@ -695,9 +697,9 @@ struct mm *mm_clone(struct mm *src) {
             /* Shared mappings: both map the object's page. Private memory:
              * both map the same page read-only, copy-on-write; the first
              * to write gets its own copy (break_cow). */
-            page_ref(*spte & PTE_ADDR);
+            page_ref(pte_phys(*spte));
             if (!(v->flags & VMA_SHARED)) {
-                *spte = (*spte & ~PTE_WRITE) | PTE_COW;
+                *spte = pte_make(pte_phys(*spte), (pte_flags(*spte) & ~PG_WRITE) | PG_COW);
                 cow = true;
             }
             *dpte = *spte;
@@ -706,16 +708,16 @@ struct mm *mm_clone(struct mm *src) {
     /* the parent (this CPU too) must not keep writing through old writable TLB entries */
     if (cow) {
         tlb_shootdown(src);
-        if (read_cr3() == virt_to_phys_hhdm(src->pml4))
-            write_cr3(read_cr3());
+        if (arch_current_root() == virt_to_phys_hhdm(src->pgd))
+            arch_tlb_flush_all();
     }
     spin_unlock_irqrestore(&src->lock, f);
     return mm;
 fail:
     if (cow) {
         tlb_shootdown(src);
-        if (read_cr3() == virt_to_phys_hhdm(src->pml4))
-            write_cr3(read_cr3());
+        if (arch_current_root() == virt_to_phys_hhdm(src->pgd))
+            arch_tlb_flush_all();
     }
     spin_unlock_irqrestore(&src->lock, f);
     mm_put(mm);
@@ -724,25 +726,25 @@ fail:
 
 static void free_tables(uint64_t *table, int level) {
     for (int i = 0; i < (level == 4 ? 256 : 512); i++) {
-        if (!(table[i] & PTE_PRESENT))
+        if (!pte_present(table[i]))
             continue;
         if (level > 2)
-            free_tables(phys_to_virt(table[i] & PTE_ADDR), level - 1);
+            free_tables(phys_to_virt(pte_phys(table[i])), level - 1);
         if (level > 1)
-            pmm_free(table[i] & PTE_ADDR, 1);
+            pmm_free(pte_phys(table[i]), 1);
     }
 }
 
 void mm_put(struct mm *mm) {
     if (__atomic_sub_fetch(&mm->refcount, 1, __ATOMIC_ACQ_REL) != 0)
         return;
-    KASSERT(read_cr3() != virt_to_phys_hhdm(mm->pml4));
+    KASSERT(arch_current_root() != virt_to_phys_hhdm(mm->pgd));
     uint64_t f = spin_lock_irqsave(&mm->lock);
     unmap_locked(mm, 0, USER_TOP);
     spin_unlock_irqrestore(&mm->lock, f);
     /* Leaf pages are gone; free the page-table pages of the lower half. */
-    free_tables(mm->pml4, 4);
-    pmm_free(virt_to_phys_hhdm(mm->pml4), 1);
+    free_tables(mm->pgd, 4);
+    pmm_free(virt_to_phys_hhdm(mm->pgd), 1);
     kfree(mm);
 }
 

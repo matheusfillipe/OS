@@ -69,7 +69,7 @@ struct vma {
 };
 
 struct mm {
-    uint64_t *pml4;
+    uint64_t *pgd;
     struct vma *vmas; /* sorted by start */
     uint64_t brk_start, brk;
     uint64_t mmap_hint;

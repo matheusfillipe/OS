@@ -50,25 +50,25 @@ int pageobj_truncate(struct pageobj *o, uint64_t size);
 uint64_t pageobj_map_page(struct pageobj *o, uint64_t idx);
 struct pageobj *pageobj_adopt(uint64_t phys, uint64_t size); /* pinned memory as a file */
 
-/* Page table flags (x86-64 long mode). */
-#define PTE_PRESENT (1ULL << 0)
-#define PTE_WRITE   (1ULL << 1)
-#define PTE_USER    (1ULL << 2)
-#define PTE_PWT     (1ULL << 3)
-#define PTE_PCD     (1ULL << 4)
-#define PTE_HUGE    (1ULL << 7)
-#define PTE_GLOBAL  (1ULL << 8)
-#define PTE_COW     (1ULL << 9) /* software bit: shared since fork; a write copies it */
-#define PTE_NX      (1ULL << 63)
-#define PTE_ADDR    0x000ffffffffff000ULL
+/* Generic page mapping flags; <asm/pgtable.h> turns them into entries.
+ * Leaf mappings are always present and readable. */
+#define PG_WRITE    (1ULL << 0)
+#define PG_USER     (1ULL << 1)
+#define PG_EXEC     (1ULL << 2)
+#define PG_GLOBAL   (1ULL << 3)
+#define PG_UNCACHED (1ULL << 4)
+#define PG_WC       (1ULL << 5)
+#define PG_COW      (1ULL << 6) /* shared since fork; a write copies it */
+
+#include <asm/pgtable.h>
 
 /* Builds the kernel's own page tables (kernel image with W^X permissions +
  * direct map of physical memory) and switches to them. */
 void vmm_init(void);
-bool vmm_map(uint64_t *pml4, uint64_t virt, uint64_t phys, uint64_t flags);
-bool vmm_map_huge(uint64_t *pml4, uint64_t virt, uint64_t phys, uint64_t flags);
-uint64_t vmm_translate(uint64_t *pml4, uint64_t virt);
-uint64_t *vmm_kernel_pml4(void);
+bool vmm_map(uint64_t *pgd, uint64_t virt, uint64_t phys, uint64_t flags);
+bool vmm_map_huge(uint64_t *pgd, uint64_t virt, uint64_t phys, uint64_t flags);
+uint64_t vmm_translate(uint64_t *pgd, uint64_t virt);
+uint64_t *vmm_kernel_pgd(void);
 /* Makes [phys, phys+len) reachable through the direct map (for firmware
  * tables and device registers outside the memory map). Pages already mapped
  * are left alone. `uncached` selects strong-uncacheable for device MMIO. */

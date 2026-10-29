@@ -87,7 +87,7 @@ void tlb_shootdown(struct mm *mm) {
  * becomes its idle thread's stack. */
 static void ap_entry(struct limine_mp_info *info) {
     struct cpu *c = (struct cpu *)info->extra_argument;
-    write_cr3(virt_to_phys_hhdm(vmm_kernel_pml4()));
+    write_cr3(virt_to_phys_hhdm(vmm_kernel_pgd()));
     cpu_enable_features();
     fpu_init_cpu();
     syscall_init_cpu();

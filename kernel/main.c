@@ -69,7 +69,7 @@ static void selftest_memory(void) {
     kprintf("selftest: pmm ok\n");
 
     extern char __text_start[];
-    KASSERT(vmm_translate(vmm_kernel_pml4(), (uint64_t)__text_start) ==
+    KASSERT(vmm_translate(vmm_kernel_pgd(), (uint64_t)__text_start) ==
             boot_kaddr_request.response->physical_base + ((uint64_t)__text_start - 0xffffffff80000000UL));
     kprintf("selftest: vmm ok\n");
 

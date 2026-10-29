@@ -1,6 +1,7 @@
 #include <kernel/arch.h>
 #include <kernel/cpu.h>
 #include <kernel/lib.h>
+#include <linux/abi.h>
 
 struct idt_entry {
     uint16_t offset_lo;
@@ -64,7 +65,25 @@ static void dump_regs(const struct regs *r) {
 }
 
 void signal_deliver(struct regs *r);
-void user_exception(struct regs *r);
+void user_exception(struct regs *r, uint64_t vector, int sig);
+bool page_fault(struct regs *r, uint64_t addr, bool write, bool exec);
+
+static void pf_handler(struct regs *r) {
+    uint64_t addr = read_cr2();
+    if (page_fault(r, addr, r->error & 2, r->error & 16))
+        return;
+    kprintf("\nkernel page fault at %lx, rip %lx, error %lx\n", addr, r->rip, r->error);
+    panic("page fault in kernel mode");
+}
+
+void arch_page_fault_init(void) { idt_set_handler(14, pf_handler); }
+
+static int exception_signal(uint64_t vector) {
+    return vector == 0 || vector == 16 || vector == 19 ? SIGFPE
+           : vector == 6                               ? SIGILL
+           : vector == 3 || vector == 1                ? SIGTRAP
+                                                       : SIGSEGV;
+}
 
 void isr_dispatch(struct regs *r);
 void isr_dispatch(struct regs *r) {
@@ -75,7 +94,7 @@ void isr_dispatch(struct regs *r) {
         return;
     }
     if (r->vector < 32 && (r->cs & 3)) {
-        user_exception(r);
+        user_exception(r, r->vector, exception_signal(r->vector));
         return;
     }
     if (r->vector < 32) {

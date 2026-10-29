@@ -105,7 +105,7 @@ static int request(struct vblk *v, uint32_t type, uint64_t sector, void *buf, si
     v->desc[n++] = (struct vring_desc){v->hdr_phys, sizeof *v->hdr, VRING_DESC_F_NEXT, 1};
     uint64_t va = (uint64_t)buf;
     while (bytes) {
-        uint64_t pa = vmm_translate(vmm_kernel_pml4(), va);
+        uint64_t pa = vmm_translate(vmm_kernel_pgd(), va);
         if (!pa)
             return -EFAULT;
         size_t chunk = PAGE_SIZE - (va & (PAGE_SIZE - 1));

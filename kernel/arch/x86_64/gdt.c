@@ -78,3 +78,12 @@ void cpu_enable_features(void) {
      * PA0 WB, PA2 UC-, PA3 UC, PA4 WB, PA5 WT, PA6 UC-, PA7 UC. */
     wrmsr(0x277, 0x0007040600070106ULL);
 }
+
+bool have_nx;
+
+void arch_mmu_init(void) {
+    uint32_t a, b, c, d;
+    cpuid(0x80000001, 0, &a, &b, &c, &d);
+    have_nx = d & (1u << 20);
+    cpu_enable_features();
+}

@@ -182,7 +182,7 @@ static int build_prdt(struct ahci_port *p, void *buf, size_t bytes) {
     int n = 0;
     uint64_t run_start = 0, run_len = 0;
     while (bytes) {
-        uint64_t pa = vmm_translate(vmm_kernel_pml4(), va);
+        uint64_t pa = vmm_translate(vmm_kernel_pgd(), va);
         if (!pa)
             return -EFAULT;
         size_t chunk = PAGE_SIZE - (va & (PAGE_SIZE - 1));

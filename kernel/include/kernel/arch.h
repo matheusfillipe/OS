@@ -18,7 +18,7 @@ struct cpu {
     struct thread *prev; /* thread we just switched away from */
     uint64_t ticks;
     volatile bool online;
-    struct mm *active_mm;          /* user page tables loaded in CR3, or NULL */
+    struct mm *active_mm;          /* user page tables loaded on this CPU, or NULL */
     volatile int tlb_flush_pending; /* set by tlb_shootdown, cleared by the flush */
 };
 
@@ -45,3 +45,6 @@ bool arch_signal_setup(struct regs *r, const struct siginfo *si, uint64_t mask, 
 bool arch_signal_return(struct regs *r, uint64_t *mask);
 
 uint64_t arch_hwcap(void);
+
+void arch_mmu_init(void);
+void arch_page_fault_init(void);
