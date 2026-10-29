@@ -281,7 +281,7 @@ void tty_init(void) {
     idt_set_handler(VEC_COM1, com1_irq);
     bool level, active_low;
     uint32_t gsi = irq_to_gsi(4, &level, &active_low);
-    ioapic_route(gsi, VEC_COM1, cpus[0]->lapic_id, level, active_low);
+    ioapic_route(gsi, VEC_COM1, cpus[0]->arch.lapic_id, level, active_low);
     outb(COM1 + 1, 0x01); /* interrupt on received data */
 }
 
@@ -317,9 +317,7 @@ void random_bytes(void *buf, size_t len) {
     uint8_t *b = buf;
     for (size_t i = 0; i < len; i++) {
         if (i % 8 == 0) {
-            uint32_t lo, hi;
-            __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
-            rng_state ^= ((uint64_t)hi << 32) | lo;
+            rng_state ^= arch_counter();
         }
         b[i] = (uint8_t)(rng_next() >> 32);
     }
@@ -356,9 +354,7 @@ static void add_dev(const char *path, const struct vnode_ops *ops, uint32_t majo
 
 void devfs_init(void) {
     vfs_mkdir_p("/dev", 0755);
-    uint32_t lo, hi;
-    __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
-    rng_state = (((uint64_t)hi << 32) | lo) | 1;
+    rng_state = arch_counter() | 1;
     add_dev("/dev/null", &null_ops, 1, 3);
     add_dev("/dev/zero", &zero_ops, 1, 5);
     add_dev("/dev/full", &full_ops, 1, 7);

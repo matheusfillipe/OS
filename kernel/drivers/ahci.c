@@ -126,7 +126,7 @@ static bool wait_reg(volatile uint8_t *base, uint32_t reg, uint32_t mask, uint32
         if (spins > 256)
             thread_yield();
         else
-            __asm__ volatile("pause");
+            cpu_relax();
     }
 }
 
@@ -266,7 +266,7 @@ static int issue(struct ahci_port *p, uint8_t cmd, uint64_t lba, uint32_t count,
         if (spins > 256)
             thread_yield();
         else
-            __asm__ volatile("pause");
+            cpu_relax();
     }
     if (r == 0 && (rd(pr, PX_TFD) & TFD_ERR))
         r = -EIO;

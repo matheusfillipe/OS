@@ -303,7 +303,7 @@ static void i8042_irq(struct regs *r) {
 static void route(uint8_t isa, uint8_t vec) {
     bool level, low;
     uint32_t gsi = irq_to_gsi(isa, &level, &low);
-    ioapic_route(gsi, vec, cpus[0]->lapic_id, level, low);
+    ioapic_route(gsi, vec, cpus[0]->arch.lapic_id, level, low);
 }
 
 static void add_dev(const char *path, struct evdev *d) {

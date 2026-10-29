@@ -78,7 +78,7 @@ void lapic_send_ipi(uint32_t apic_id, uint8_t vector) {
         lapic_write(LAPIC_ICR_HI, apic_id << 24);
         lapic_write(LAPIC_ICR_LO, vector);
         while (lapic_read(LAPIC_ICR_LO) & (1u << 12)) /* delivery pending */
-            __asm__ volatile("pause");
+            cpu_relax();
     }
 }
 

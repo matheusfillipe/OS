@@ -40,22 +40,16 @@ static int64_t read_rtc(void) {
     return days * 86400 + h * 3600 + mi * 60 + s;
 }
 
-static inline uint64_t rdtsc(void) {
-    uint32_t lo, hi;
-    __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
-    return ((uint64_t)hi << 32) | lo;
-}
-
 /* Measures the TSC over 50 ms of the (already calibrated) APIC tick. */
 void time_init(void) {
     boot_epoch = read_rtc();
     uint64_t start_tick = global_ticks;
     while (global_ticks == start_tick)
-        __asm__ volatile("sti; hlt");
-    uint64_t t0 = rdtsc(), tick0 = global_ticks;
+        cpu_idle_wait();
+    uint64_t t0 = arch_counter(), tick0 = global_ticks;
     while (global_ticks < tick0 + HZ / 20)
-        __asm__ volatile("sti; hlt");
-    uint64_t t1 = rdtsc();
+        cpu_idle_wait();
+    uint64_t t1 = arch_counter();
     tsc_hz = (t1 - t0) * 20;
     tsc_boot = t0 - (tick0 * tsc_hz / HZ);
     kprintf("time: TSC %lu MHz, wall clock %ld\n", tsc_hz / 1000000, boot_epoch);
@@ -64,7 +58,7 @@ void time_init(void) {
 uint64_t time_monotonic_ns(void) {
     if (!tsc_hz)
         return global_ticks * (1000000000ULL / HZ);
-    uint64_t d = rdtsc() - tsc_boot;
+    uint64_t d = arch_counter() - tsc_boot;
     return d / tsc_hz * 1000000000ULL + (d % tsc_hz) * 1000000000ULL / tsc_hz;
 }
 

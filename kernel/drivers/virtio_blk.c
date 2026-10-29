@@ -145,7 +145,7 @@ static int request(struct vblk *v, uint32_t type, uint64_t sector, void *buf, si
         if (spins > 256)
             thread_yield();
         else
-            __asm__ volatile("pause");
+            cpu_relax();
     }
     v->used_seen++;
     __atomic_thread_fence(__ATOMIC_SEQ_CST);

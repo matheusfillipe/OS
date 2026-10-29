@@ -232,7 +232,7 @@ static inline uint64_t elapsed(uint64_t now, uint64_t since) { return now > sinc
 static void udelay(uint64_t us) {
     uint64_t end = time_monotonic_ns() + us * 1000;
     while (time_monotonic_ns() < end)
-        __asm__ volatile("pause");
+        cpu_relax();
 }
 
 /* Polls until (reg & mask) == want or `us` microseconds pass. */
@@ -260,7 +260,7 @@ static void *dma_alloc(size_t bytes, uint64_t *phys) {
 static bool corb_cmd(uint32_t cmd, uint32_t *resp) {
     hda.corb_wp = (uint16_t)((hda.corb_wp + 1) % hda.corb_entries);
     hda.corb[hda.corb_wp] = cmd;
-    __asm__ volatile("" ::: "memory");
+    barrier();
     wr16(CORBWP, hda.corb_wp);
     uint64_t end = time_monotonic_ns() + 20 * 1000000ULL;
     for (;;) {
@@ -278,7 +278,7 @@ static bool corb_cmd(uint32_t cmd, uint32_t *resp) {
         }
         if (time_monotonic_ns() > end)
             return false;
-        __asm__ volatile("pause");
+        cpu_relax();
     }
 }
 
@@ -1444,7 +1444,7 @@ static bool enable_msi(struct pci_dev *d, uint8_t vector) {
         uint32_t hdr = pci_read32(d, ptr);
         if ((hdr & 0xff) == 0x05) {
             uint16_t ctl = (uint16_t)(hdr >> 16);
-            pci_write32(d, (uint8_t)(ptr + 4), 0xfee00000u | (cpus[0]->lapic_id << 12));
+            pci_write32(d, (uint8_t)(ptr + 4), 0xfee00000u | (cpus[0]->arch.lapic_id << 12));
             if (ctl & 0x80) { /* 64-bit address */
                 pci_write32(d, (uint8_t)(ptr + 8), 0);
                 pci_write16(d, (uint8_t)(ptr + 12), vector);

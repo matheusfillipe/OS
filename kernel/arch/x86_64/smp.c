@@ -66,7 +66,7 @@ void tlb_shootdown(struct mm *mm) {
         any = true;
         __atomic_store_n(&c->tlb_flush_pending, 1, __ATOMIC_SEQ_CST);
         sent[i / 64] |= 1ULL << (i % 64);
-        lapic_send_ipi(c->lapic_id, VEC_TLB);
+        lapic_send_ipi(c->arch.lapic_id, VEC_TLB);
     }
     for (uint32_t i = 0; any && i < cpu_count; i++) {
         if (!(sent[i / 64] & (1ULL << (i % 64))))
@@ -74,7 +74,7 @@ void tlb_shootdown(struct mm *mm) {
         /* Answer requests aimed at us while we wait, or two CPUs shooting
          * at each other would wait forever. */
         while (__atomic_load_n(&cpus[i]->tlb_flush_pending, __ATOMIC_ACQUIRE)) {
-            __asm__ volatile("pause");
+            cpu_relax();
             tlb_service();
         }
     }
@@ -98,7 +98,7 @@ static void ap_entry(struct limine_mp_info *info) {
     sched_init_cpu();
     __atomic_store_n(&c->online, true, __ATOMIC_RELEASE);
     for (;;)
-        __asm__ volatile("sti; hlt");
+        cpu_idle_wait();
 }
 
 void smp_init(void) {
@@ -121,7 +121,7 @@ void smp_init(void) {
         struct cpu *c = kzalloc(sizeof *c);
         KASSERT(c);
         c->id = cpu_count;
-        c->lapic_id = info->lapic_id;
+        c->arch.lapic_id = info->lapic_id;
         cpus[cpu_count++] = c;
         info->extra_argument = (uint64_t)c;
         __atomic_store_n(&info->goto_address, ap_entry, __ATOMIC_SEQ_CST);
@@ -131,7 +131,7 @@ void smp_init(void) {
     for (uint32_t i = 1; i < cpu_count; i++)
         while (!__atomic_load_n(&cpus[i]->online, __ATOMIC_ACQUIRE)) {
             if (global_ticks > deadline)
-                panic("smp: cpu %u (apic %u) did not come online", i, cpus[i]->lapic_id);
+                panic("smp: cpu %u (apic %u) did not come online", i, cpus[i]->arch.lapic_id);
             __asm__ volatile("sti; pause");
         }
     kprintf("smp: %u cpu(s) online%s\n", cpu_count, mp->flags & LIMINE_MP_RESPONSE_X86_64_X2APIC ? " (x2apic)" : "");

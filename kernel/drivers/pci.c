@@ -141,6 +141,6 @@ bool pci_route_irq(const struct pci_dev *d, uint8_t vector) {
         bool l, a;
         gsi = irq_to_gsi(d->irq_line, &l, &a);
     }
-    ioapic_route(gsi, vector, cpus[0]->lapic_id, level, active_low);
+    ioapic_route(gsi, vector, cpus[0]->arch.lapic_id, level, active_low);
     return true;
 }

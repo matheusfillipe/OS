@@ -151,13 +151,13 @@ void kprintf(const char *fmt, ...) {
 
 void halt_forever(void) {
     for (;;) {
-        cli();
-        hlt();
+        irq_disable();
+        halt();
     }
 }
 
 void panic(const char *fmt, ...) {
-    cli();
+    irq_disable();
     char buf[512];
     va_list ap;
     va_start(ap, fmt);

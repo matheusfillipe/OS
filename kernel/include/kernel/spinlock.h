@@ -1,4 +1,5 @@
 #pragma once
+#include <asm/cpu.h>
 #include <stdint.h>
 
 typedef struct {
@@ -17,24 +18,13 @@ void tlb_service(void);
 static inline void spin_lock(spinlock_t *l) {
     while (__atomic_exchange_n(&l->locked, 1, __ATOMIC_ACQUIRE))
         while (__atomic_load_n(&l->locked, __ATOMIC_RELAXED)) {
-            __asm__ volatile("pause");
+            cpu_relax();
             if (__atomic_load_n(&tlb_shootdowns_active, __ATOMIC_RELAXED))
                 tlb_service();
         }
 }
 
 static inline void spin_unlock(spinlock_t *l) { __atomic_store_n(&l->locked, 0, __ATOMIC_RELEASE); }
-
-static inline uint64_t irq_save(void) {
-    uint64_t flags;
-    __asm__ volatile("pushfq; popq %0; cli" : "=r"(flags)::"memory");
-    return flags;
-}
-
-static inline void irq_restore(uint64_t flags) {
-    if (flags & 0x200)
-        __asm__ volatile("sti" ::: "memory");
-}
 
 /* Lock that also keeps local interrupts off while held, so an interrupt
  * handler on the same CPU can never deadlock against its own thread. */

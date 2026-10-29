@@ -1381,9 +1381,7 @@ static void put_flags(struct sbuf *b, const struct flag_name *t, uint32_t reg) {
 
 static uint64_t cpu_khz(void) {
     uint64_t ns = time_monotonic_ns() - ns0;
-    uint32_t lo, hi;
-    __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
-    uint64_t tsc = (((uint64_t)hi << 32) | lo) - tsc0;
+    uint64_t tsc = arch_counter() - tsc0;
     return ns > 1000000 ? tsc / (ns / 1000000) : 0; /* TSC ticks per ms = kHz */
 }
 
@@ -1441,7 +1439,7 @@ static int show_cpuinfo(struct snode *n, struct sbuf *b) {
         sb_printf(b, "physical id\t: 0\nsiblings\t: %u\ncore id\t\t: %u\ncpu cores\t: %u\n", cpu_count, i,
                   cpu_count);
         sb_printf(b, "apicid\t\t: %u\ninitial apicid\t: %u\nfpu\t\t: yes\nfpu_exception\t: yes\n",
-                  cpus[i] ? cpus[i]->lapic_id : i, cpus[i] ? cpus[i]->lapic_id : i);
+                  cpus[i] ? cpus[i]->arch.lapic_id : i, cpus[i] ? cpus[i]->arch.lapic_id : i);
         sb_printf(b, "cpuid level\t: %u\nwp\t\t: yes\nflags\t\t:", max);
         put_flags(b, f1_edx, edx1);
         put_flags(b, e1_edx, de);
@@ -1762,9 +1760,7 @@ struct vnode *procfs_new_root(void);
 struct vnode *procfs_new_root(void) { return synth_root(&proc_root); }
 
 void procfs_init(void) {
-    uint32_t lo, hi;
-    __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
-    tsc0 = ((uint64_t)hi << 32) | lo;
+    tsc0 = arch_counter();
     ns0 = time_monotonic_ns();
     make_uuid(boot_id);
     struct vnode *root = synth_root(&proc_root);

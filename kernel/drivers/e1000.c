@@ -98,7 +98,7 @@ static int e1000_tx(struct netif *nif, const void *frame, size_t len) {
     d->cmd = TX_CMD_EOP | TX_CMD_IFCS | TX_CMD_RS;
     d->status = 0;
     e->tx_cur = (e->tx_cur + 1) % NTX;
-    __asm__ volatile("" ::: "memory");
+    barrier();
     wr(e, REG_TDT, e->tx_cur);
     nif->tx_packets++;
     return 0;

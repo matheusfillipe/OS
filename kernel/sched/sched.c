@@ -41,7 +41,7 @@ static void kick_idle_cpu(void) {
     for (uint32_t i = 0; i < cpu_count; i++) {
         struct cpu *c = cpus[i];
         if (c && c != self && c->online && c->current == c->idle) {
-            lapic_send_ipi(c->lapic_id, VEC_RESCHED);
+            lapic_send_ipi(c->arch.lapic_id, VEC_RESCHED);
             return;
         }
     }
@@ -67,9 +67,7 @@ static struct thread *rq_pop(void) {
  * read the CPU it left — someone else's thread. That gave syscalls another
  * process's files and signals: double frees, null user pointers. */
 struct thread *thread_current(void) {
-    struct thread *t;
-    __asm__ volatile("mov %%gs:%c1, %0" : "=r"(t) : "i"(__builtin_offsetof(struct cpu, current)));
-    return t;
+    return this_cpu_read(current);
 }
 
 static void thread_free(struct thread *t) {
@@ -89,8 +87,8 @@ static void sched_finish(void) {
     c->prev = NULL;
     if (cur != c->idle) {
         uint64_t top = thread_kstack_top(cur);
-        c->kernel_rsp = top;
-        c->tss.rsp[0] = top;
+        c->arch.kernel_rsp = top;
+        c->arch.tss.rsp[0] = top;
     }
     struct mm *mm = NULL;
     if (cur->user) {
@@ -166,7 +164,7 @@ static void schedule(enum thread_state new_state) {
 void thread_start(void) {
     sched_finish();
     struct thread *t = thread_current();
-    __asm__ volatile("sti");
+    irq_enable();
     t->entry(t->arg);
     thread_exit();
 }
@@ -234,7 +232,7 @@ void thread_yield(void) {
 }
 
 void thread_exit(void) {
-    __asm__ volatile("cli");
+    irq_disable();
     schedule(THREAD_DEAD);
     panic("thread_exit: dead thread was scheduled again");
 }

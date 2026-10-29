@@ -56,18 +56,8 @@ static uint8_t bsp_df_stack[16384] __attribute__((aligned(16)));
 
 /* ---- Boot self-tests: each prints a line the boot test looks for ---- */
 
-static volatile int breakpoint_hits;
-static void on_breakpoint(struct regs *r) {
-    (void)r;
-    breakpoint_hits++;
-}
-
 static void selftest_memory(void) {
-    idt_set_handler(3, on_breakpoint);
-    __asm__ volatile("int3");
-    KASSERT(breakpoint_hits == 1);
-    idt_set_handler(3, NULL);
-    kprintf("selftest: interrupts ok\n");
+    arch_selftest_breakpoint();
 
     uint64_t before = pmm_free_pages();
     uint64_t a = pmm_alloc(1), b = pmm_alloc(8);
@@ -335,7 +325,7 @@ void kmain(void) {
     fbcon_init();
     kprintf("Operating System kernel starting\n");
 
-    bsp_cpu.df_stack = bsp_df_stack;
+    bsp_cpu.arch.df_stack = bsp_df_stack;
     gdt_init(&bsp_cpu);
     cpu_set_percpu(&bsp_cpu);
     cpus[0] = &bsp_cpu;
@@ -354,11 +344,11 @@ void kmain(void) {
     syscall_init_cpu();
     acpi_init();
     apic_init();
-    bsp_cpu.lapic_id = lapic_id();
+    bsp_cpu.arch.lapic_id = lapic_id();
     sched_init_cpu();
     smp_init();
 
     KASSERT(thread_create("init", init_main, NULL));
     for (;;) /* this boot context is now CPU 0's idle thread */
-        __asm__ volatile("sti; hlt");
+        cpu_idle_wait();
 }
