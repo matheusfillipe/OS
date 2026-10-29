@@ -20,6 +20,8 @@
  * kernel's upper-half entries. */
 #define USER_PGD_ENTRIES 256
 
+#define KERNEL_VIRT_BASE 0xffff800000000000ULL
+
 extern bool have_nx;
 
 static inline uint64_t pte_bits(uint64_t pg) {

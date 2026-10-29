@@ -1,5 +1,6 @@
 #include <kernel/drivers.h>
 #include <kernel/lib.h>
+#include <kernel/mm.h>
 #include <kernel/platform.h>
 #include <kernel/spinlock.h>
 
@@ -168,7 +169,7 @@ void panic(const char *fmt, ...) {
     log_write("\n", 1);
     /* where it came from: the frame-pointer chain (addr2line -e kernel.elf) */
     uint64_t *fp = __builtin_frame_address(0);
-    for (int i = 0; i < 16 && fp && (uint64_t)fp >= 0xffff800000000000ULL && ((uint64_t)fp & 7) == 0; i++) {
+    for (int i = 0; i < 16 && fp && (uint64_t)fp >= KERNEL_VIRT_BASE && ((uint64_t)fp & 7) == 0; i++) {
         char line[40];
         int l = ksnprintf(line, sizeof line, "  at %lx\n", fp[1]);
         log_write(line, (size_t)l);

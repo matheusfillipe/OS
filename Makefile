@@ -3,8 +3,13 @@
 #   make run      boot it in QEMU (UEFI) with a window
 #   make test     headless boot test (serial log assertions)
 
+ARCH        ?= x86_64
 LIMINE_DIR  := vendor/limine
+ifeq ($(ARCH),arm64)
+BUILD       := build/arm64
+else
 BUILD       := build
+endif
 ISO         := $(BUILD)/os.iso
 KERNEL      := $(BUILD)/kernel.elf
 INITRD      := $(BUILD)/initrd.cpio
@@ -20,8 +25,21 @@ OVMF        ?= $(firstword $(wildcard /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share
                  /opt/homebrew/share/qemu/edk2-x86_64-code.fd /usr/local/share/qemu/edk2-x86_64-code.fd))
 OVMF_VARS   ?= $(firstword $(wildcard /usr/share/OVMF/OVMF_VARS_4M.fd \
                  /opt/homebrew/share/qemu/edk2-i386-vars.fd /usr/local/share/qemu/edk2-i386-vars.fd))
+AAVMF       ?= $(firstword $(wildcard /usr/share/AAVMF/AAVMF_CODE.fd /usr/share/qemu-efi-aarch64/QEMU_EFI.fd \
+                 /opt/homebrew/share/qemu/edk2-aarch64-code.fd /usr/local/share/qemu/edk2-aarch64-code.fd))
+AAVMF_VARS  ?= $(firstword $(wildcard /usr/share/AAVMF/AAVMF_VARS.fd \
+                 /opt/homebrew/share/qemu/edk2-arm-vars.fd /usr/local/share/qemu/edk2-arm-vars.fd))
+ifeq ($(ARCH),arm64)
+QEMU        ?= qemu-system-aarch64
+QEMU_FLAGS  ?= -M virt,gic-version=3 -accel $(if $(filter Darwin,$(shell uname -s)),hvf,kvm) -cpu host -smp 4 -m 2G
+DOCKER_PLATFORM := linux/arm64
+BUILDER     := os-builder-arm64
+else
 QEMU        ?= qemu-system-x86_64
 QEMU_FLAGS  ?= -M q35 -m 2G -smp 4 -cpu max -no-reboot -netdev user,id=n0 -device e1000,netdev=n0
+DOCKER_PLATFORM := linux/amd64
+BUILDER     := os-builder
+endif
 # The persistent disk for `make run`: /dev/sda inside the OS, created empty
 # (1 GiB, sparse) on first use. `make clean` keeps it; delete it by hand to
 # start over as a new person.
@@ -33,10 +51,10 @@ DISK_FLAGS  := -drive id=disk0,file=$(DISK_IMG),format=raw,if=none -device ide-h
 all: iso
 
 ifeq ($(shell uname -s),Darwin)
-# The build needs an x86-64 Linux toolchain, so on macOS we run it in an Ubuntu container.
+# The build needs a Linux toolchain for the target, so on macOS we run it in an Ubuntu container.
 kernel ports userland initrd base iso:
-	docker build -q --platform linux/amd64 -t os-builder - < scripts/builder.Dockerfile >/dev/null
-	docker run --rm --platform linux/amd64 -v "$(CURDIR)":/os -w /os os-builder make $@
+	docker build -q --platform $(DOCKER_PLATFORM) -t $(BUILDER) - < scripts/builder.Dockerfile >/dev/null
+	docker run --rm --platform $(DOCKER_PLATFORM) -v "$(CURDIR)":/os -w /os $(BUILDER) make $@$(if $(filter-out x86_64,$(ARCH)), ARCH=$(ARCH))
 else
 kernel:
 	$(MAKE) -C kernel BUILD=../$(BUILD)/kernel OUT=../$(KERNEL)
@@ -79,6 +97,19 @@ $(BASE_CPIO): $(shell [ -f $(BASE_DIR)/.stamp ] && echo $(BASE_DIR)/.stamp)
 
 base: $(BASE_CPIO)
 
+ifeq ($(ARCH),arm64)
+# UEFI only, with the kernel alone: there is no arm64 user space.
+iso: kernel $(LIMINE_DIR)
+	rm -rf $(BUILD)/iso_root
+	mkdir -p $(BUILD)/iso_root/boot/limine $(BUILD)/iso_root/EFI/BOOT
+	cp $(KERNEL) $(BUILD)/iso_root/boot/kernel.elf
+	sed '/module_path/d' boot/limine.conf > $(BUILD)/iso_root/boot/limine/limine.conf
+	cp $(LIMINE_DIR)/limine-uefi-cd.bin $(BUILD)/iso_root/boot/limine/
+	cp $(LIMINE_DIR)/BOOTAA64.EFI $(BUILD)/iso_root/EFI/BOOT/
+	xorriso -as mkisofs -R -r -J -hfsplus -apm-block-size 2048 --efi-boot boot/limine/limine-uefi-cd.bin \
+		-efi-boot-part --efi-boot-image --protective-msdos-label \
+		$(BUILD)/iso_root -o $(ISO) 2>/dev/null
+else
 iso: kernel initrd base $(LIMINE_DIR)
 	rm -rf $(BUILD)/iso_root
 	mkdir -p $(BUILD)/iso_root/boot/limine $(BUILD)/iso_root/EFI/BOOT
@@ -106,6 +137,7 @@ iso: kernel initrd base $(LIMINE_DIR)
 		$(BUILD)/iso_root -o $(ISO) 2>/dev/null
 	$(LIMINE_DIR)/limine bios-install $(ISO) 2>/dev/null
 endif
+endif
 
 # On a Windows drive under WSL (/mnt/c) NTFS keeps the file sparse only if
 # told so before it grows; elsewhere fsutil.exe is absent and truncate is enough.
@@ -115,10 +147,17 @@ $(DISK_IMG):
 	-fsutil.exe sparse setflag "$$(wslpath -w $(abspath $@))" >/dev/null 2>&1
 	truncate -s 1G $@
 
+ifeq ($(ARCH),arm64)
+run: iso
+	cp $(AAVMF_VARS) $(BUILD)/aavmf_vars.fd
+	$(QEMU) $(QEMU_FLAGS) -drive if=pflash,format=raw,readonly=on,file=$(AAVMF) \
+		-drive if=pflash,format=raw,file=$(BUILD)/aavmf_vars.fd -cdrom $(ISO) -serial stdio
+else
 run: iso | $(DISK_IMG)
 	cp $(OVMF_VARS) $(BUILD)/ovmf_vars.fd
 	$(QEMU) $(QEMU_FLAGS) -drive if=pflash,format=raw,readonly=on,file=$(OVMF) \
 		-drive if=pflash,format=raw,file=$(BUILD)/ovmf_vars.fd $(DISK_FLAGS) -cdrom $(ISO) -serial stdio
+endif
 
 run-bios: iso | $(DISK_IMG)
 	$(QEMU) $(QEMU_FLAGS) $(DISK_FLAGS) -cdrom $(ISO) -serial stdio

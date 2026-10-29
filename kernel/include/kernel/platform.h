@@ -25,3 +25,6 @@ bool platform_fb_mode_fits(uint32_t w, uint32_t h);
 bool platform_fb_set_mode(uint32_t w, uint32_t h, uint64_t *phys, uint64_t *vram_bytes);
 /* Reads a QEMU fw_cfg file into buf; returns the byte count, or a negative value when it does not exist. */
 int fwcfg_read_file(const char *name, char *buf, size_t size);
+/* The fw_cfg registers: select an item, then read its bytes in order. */
+void fwcfg_select(uint16_t key);
+void fwcfg_read(void *buf, size_t len);
