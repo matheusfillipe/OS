@@ -3,6 +3,9 @@
 #include <kernel/lib.h>
 #include <kernel/mm.h>
 
+__attribute__((used, section(".limine_requests")))
+static volatile struct limine_rsdp_request boot_rsdp_request = {.id = LIMINE_RSDP_REQUEST_ID, .revision = 0};
+
 /* Just enough ACPI to find static tables (MADT, HPET, MCFG, FADT). The AML
  * interpreter (uACPI) arrives with power management. */
 

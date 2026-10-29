@@ -1,7 +1,6 @@
 #include <kernel/arch.h>
 #include <kernel/blkdev.h>
 #include <kernel/boot.h>
-#include <kernel/cpu.h>
 #include <kernel/drivers.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
@@ -29,13 +28,6 @@ volatile struct limine_hhdm_request boot_hhdm_request = {.id = LIMINE_HHDM_REQUE
 __attribute__((used, section(".limine_requests")))
 volatile struct limine_executable_address_request boot_kaddr_request = {
     .id = LIMINE_EXECUTABLE_ADDRESS_REQUEST_ID, .revision = 0};
-
-__attribute__((used, section(".limine_requests")))
-volatile struct limine_rsdp_request boot_rsdp_request = {.id = LIMINE_RSDP_REQUEST_ID, .revision = 0};
-
-__attribute__((used, section(".limine_requests")))
-volatile struct limine_mp_request boot_mp_request = {
-    .id = LIMINE_MP_REQUEST_ID, .revision = 0, .flags = LIMINE_MP_REQUEST_X86_64_X2APIC};
 
 __attribute__((used, section(".limine_requests")))
 static volatile struct limine_module_request module_request = {.id = LIMINE_MODULE_REQUEST_ID, .revision = 0};
@@ -69,7 +61,8 @@ static void selftest_memory(void) {
 
     extern char __text_start[];
     KASSERT(vmm_translate(vmm_kernel_pgd(), (uint64_t)__text_start) ==
-            boot_kaddr_request.response->physical_base + ((uint64_t)__text_start - 0xffffffff80000000UL));
+            boot_kaddr_request.response->physical_base +
+                ((uint64_t)__text_start - boot_kaddr_request.response->virtual_base));
     kprintf("selftest: vmm ok\n");
 
     void *ptrs[64];
@@ -149,7 +142,6 @@ static void selftest_scheduler(void) {
     kprintf("selftest: preemption ok\n");
 }
 
-void fpu_capture_clean_state(void);
 
 /* Modules whose string names an absolute path (limine.conf: module_string:
  * /usr/share/...) become read-only files there, backed by the memory the
@@ -184,7 +176,6 @@ static struct limine_file *find_module(const char *suffix) {
 /* Development aid: QEMU can hand the OS a saved mind and design
  * (-fw_cfg name=opt/os/mind.json,file=... and opt/os/design.json) so
  * the desktop can be previewed without repeating the onboarding. */
-int fwcfg_read_file(const char *name, char *buf, size_t size);
 void hda_init(void);
 
 static void preload_state_from_fwcfg(void) {

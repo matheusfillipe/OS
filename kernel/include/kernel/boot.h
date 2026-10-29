@@ -7,8 +7,6 @@ extern volatile struct limine_framebuffer_request boot_fb_request;
 extern volatile struct limine_memmap_request boot_memmap_request;
 extern volatile struct limine_hhdm_request boot_hhdm_request;
 extern volatile struct limine_executable_address_request boot_kaddr_request;
-extern volatile struct limine_rsdp_request boot_rsdp_request;
-extern volatile struct limine_mp_request boot_mp_request;
 
 extern uint64_t hhdm_offset;
 

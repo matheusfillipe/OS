@@ -79,7 +79,7 @@ void syscall_dispatch(struct regs *r) {
         ut->sc_hist[i].nr = (int16_t)nr, ut->sc_hist[i].ret = ret;
         ut->sc_hist[i].a1 = ut->sc_a1, ut->sc_hist[i].a2 = ut->sc_a2, ut->sc_hist[i].a3 = ut->sc_a3;
     }
-    /* execve and rt_sigreturn rewrite the whole frame, rax included. */
+    /* execve and rt_sigreturn rewrite the whole frame, return value included. */
     if (nr != NR_rt_sigreturn && !(nr == NR_execve && ret == 0))
         regs_set_return(r, (uint64_t)ret);
     self = thread_current();

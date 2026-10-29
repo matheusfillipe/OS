@@ -8,8 +8,7 @@
 
 struct thread;
 
-/* Per-CPU state, reached through the GS base register. `arch` must stay
- * first: this_cpu() reads its `self` with a single gs-relative load. */
+/* Per-CPU state. `arch` must stay first: the arch reaches its per-CPU state through it. */
 struct cpu {
     struct arch_cpu arch;
     uint32_t id;       /* 0..cpu_count-1, BSP is 0 */
@@ -21,10 +20,6 @@ struct cpu {
     struct mm *active_mm;          /* user page tables loaded on this CPU, or NULL */
     volatile int tlb_flush_pending; /* set by tlb_shootdown, cleared by the flush */
 };
-
-_Static_assert(offsetof(struct cpu, arch.self) == 0, "this_cpu() reads self at gs:0");
-_Static_assert(offsetof(struct cpu, arch.kernel_rsp) == 8, "syscall.S reads kernel_rsp at gs:8");
-_Static_assert(offsetof(struct cpu, arch.user_rsp) == 16, "syscall.S uses user_rsp at gs:16");
 
 #define MAX_CPUS 256
 extern struct cpu *cpus[MAX_CPUS];
@@ -52,8 +47,10 @@ uint64_t arch_hwcap(void);
 void arch_send_resched(struct cpu *c);
 
 struct sbuf;
-/* Writes one /proc/cpuinfo block per CPU; khz is the measured counter rate. */
-void arch_cpuinfo(struct sbuf *b, uint64_t khz);
+/* Starts the baseline the reported CPU frequency is measured against. */
+void arch_cpuinfo_init(void);
+/* Writes one /proc/cpuinfo block per CPU. */
+void arch_cpuinfo(struct sbuf *b);
 /* Base frequency in MHz, 0 when the CPU does not report it. */
 uint32_t arch_base_mhz(void);
 

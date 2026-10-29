@@ -1,6 +1,7 @@
 #include <asm/msr.h>
 #include <kernel/arch.h>
 #include <kernel/lib.h>
+#include <kernel/proc.h>
 #include <kernel/sbuf.h>
 
 struct flag_name {
@@ -57,7 +58,21 @@ static void put_flags(struct sbuf *b, const struct flag_name *t, uint32_t reg) {
             sb_printf(b, " %s", t->name);
 }
 
-void arch_cpuinfo(struct sbuf *b, uint64_t khz) {
+static uint64_t counter0, ns0;
+
+void arch_cpuinfo_init(void) {
+    counter0 = arch_counter();
+    ns0 = time_monotonic_ns();
+}
+
+static uint64_t counter_khz(void) {
+    uint64_t ns = time_monotonic_ns() - ns0;
+    uint64_t ticks = arch_counter() - counter0;
+    return ns > 1000000 ? ticks / (ns / 1000000) : 0;
+}
+
+void arch_cpuinfo(struct sbuf *b) {
+    uint64_t khz = counter_khz();
     uint32_t a, bx, c, d, max, maxext;
     char vendor[13] = {0}, model[49] = {0};
     cpuid(0, 0, &max, &bx, &c, &d);

@@ -1,13 +1,13 @@
 #include <kernel/arch.h>
 #include <kernel/boot.h>
-#include <kernel/cpu.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
 #include <kernel/proc.h>
 #include <kernel/sched.h>
 
-struct cpu *cpus[MAX_CPUS];
-uint32_t cpu_count = 1;
+__attribute__((used, section(".limine_requests")))
+static volatile struct limine_mp_request boot_mp_request = {
+    .id = LIMINE_MP_REQUEST_ID, .revision = 0, .flags = LIMINE_MP_REQUEST_X86_64_X2APIC};
 
 void arch_send_resched(struct cpu *c) { lapic_send_ipi(c->arch.lapic_id, VEC_RESCHED); }
 
@@ -42,7 +42,7 @@ void tlb_service(void) {
     /* Clear first, then flush: a request that arrives after the clear stays
      * pending (and has its own IPI), so none is lost. */
     if (__atomic_exchange_n(&c->tlb_flush_pending, 0, __ATOMIC_ACQ_REL))
-        write_cr3(read_cr3());
+        arch_tlb_flush_all();
 }
 
 static void tlb_irq(struct regs *r) {
@@ -92,7 +92,7 @@ void tlb_shootdown(struct mm *mm) {
  * becomes its idle thread's stack. */
 static void ap_entry(struct limine_mp_info *info) {
     struct cpu *c = (struct cpu *)info->extra_argument;
-    write_cr3(virt_to_phys_hhdm(vmm_kernel_pgd()));
+    arch_load_root(virt_to_phys_hhdm(vmm_kernel_pgd()));
     cpu_enable_features();
     fpu_init_cpu();
     syscall_init_cpu();

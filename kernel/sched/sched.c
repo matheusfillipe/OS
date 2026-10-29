@@ -1,7 +1,6 @@
 #include <kernel/arch.h>
 #include <kernel/lib.h>
 #include <kernel/boot.h>
-#include <kernel/cpu.h>
 #include <kernel/mm.h>
 #include <kernel/proc.h>
 #include <kernel/sched.h>
@@ -13,6 +12,10 @@
  * have not been saved yet. Per-CPU queues with work stealing come later. */
 
 #define KSTACK_SIZE (32 * 1024)
+
+volatile uint64_t global_ticks;
+struct cpu *cpus[MAX_CPUS];
+uint32_t cpu_count = 1;
 
 void thread_start(void);
 

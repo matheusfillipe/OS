@@ -15,11 +15,6 @@ typedef void (*irq_handler_t)(struct regs *r);
 void idt_init(void);
 void idt_load(void);
 void idt_set_handler(uint8_t vector, irq_handler_t handler);
-void lapic_eoi(void);
-
-static inline void irq_set_handler(uint8_t vector, irq_handler_t handler) { idt_set_handler(vector, handler); }
-static inline void irq_eoi(void) { lapic_eoi(); }
-uint32_t arch_msi_address(void);
 
 /* ACPI */
 void acpi_init(void);
@@ -33,8 +28,10 @@ uint32_t lapic_id(void);
 void lapic_send_ipi(uint32_t apic_id, uint8_t vector);
 void ioapic_route(uint32_t gsi, uint8_t vector, uint32_t dest_apic, bool level, bool active_low);
 uint32_t irq_to_gsi(uint8_t isa_irq, bool *level, bool *active_low);
-extern volatile uint64_t global_ticks;
-#define HZ 250
+
+static inline void irq_set_handler(uint8_t vector, irq_handler_t handler) { idt_set_handler(vector, handler); }
+static inline void irq_eoi(void) { lapic_eoi(); }
+uint32_t arch_msi_address(void);
 
 /* SMP */
 void smp_init(void);

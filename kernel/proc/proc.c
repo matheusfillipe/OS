@@ -1,9 +1,9 @@
 #include <asm/elf.h>
 #include <kernel/arch.h>
 #include <kernel/boot.h>
-#include <kernel/cpu.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
+#include <kernel/platform.h>
 #include <kernel/proc.h>
 #include <kernel/vfs.h>
 
@@ -707,7 +707,6 @@ void user_exception(struct regs *r, uint64_t vector, int sig) {
 
 static const char *init_path;
 
-int fwcfg_read_file(const char *name, char *buf, size_t size);
 
 static void init_entry(void *arg) {
     (void)arg;
@@ -741,7 +740,7 @@ static void init_entry(void *arg) {
     if (r < 0)
         panic("cannot run %s (error %d)", init_path, r);
     if (debug_trace)
-        kprintf("init: entering user mode at rip=%lx rsp=%lx\n", frame->rip, frame->rsp);
+        kprintf("init: entering user mode at rip=%lx rsp=%lx\n", regs_ip(frame), regs_sp(frame));
     return_to_user(frame);
 }
 

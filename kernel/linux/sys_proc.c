@@ -1,4 +1,3 @@
-#include <kernel/cpu.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
 #include <kernel/proc.h>

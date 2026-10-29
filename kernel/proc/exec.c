@@ -1,6 +1,5 @@
 #include <asm/elf.h>
 #include <kernel/arch.h>
-#include <kernel/cpu.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
 #include <kernel/ns.h>

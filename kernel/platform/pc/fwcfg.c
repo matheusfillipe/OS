@@ -1,5 +1,6 @@
 #include <asm/io.h>
 #include <kernel/lib.h>
+#include <kernel/platform.h>
 
 /* QEMU's fw_cfg interface: lets the test harness pass named values
  * (-fw_cfg name=opt/os/...,string=...) without a kernel command line.
@@ -22,7 +23,6 @@ static void read_bytes(void *buf, size_t len) {
 
 static uint32_t be32(const uint8_t *p) { return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3]; }
 
-int fwcfg_read_file(const char *name, char *buf, size_t size);
 int fwcfg_read_file(const char *name, char *buf, size_t size) {
     char sig[4];
     select(FW_CFG_SIGNATURE);

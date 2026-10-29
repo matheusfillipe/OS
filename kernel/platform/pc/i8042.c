@@ -1,3 +1,4 @@
+#include "isa.h"
 #include <asm/io.h>
 #include <kernel/arch.h>
 #include <kernel/input.h>
@@ -204,12 +205,6 @@ static void i8042_irq(struct regs *r) {
     lapic_eoi();
 }
 
-static void route(uint8_t isa, uint8_t vec) {
-    bool level, low;
-    uint32_t gsi = irq_to_gsi(isa, &level, &low);
-    ioapic_route(gsi, vec, cpus[0]->arch.lapic_id, level, low);
-}
-
 void i8042_init(void) {
     /* Quiet both ports, flush, enable the aux port and both interrupts,
      * keep translation. The flush is bounded: under Windows' hypervisor a
@@ -238,7 +233,7 @@ void i8042_init(void) {
 
     idt_set_handler(VEC_KBD, i8042_irq);
     idt_set_handler(VEC_MOUSE, i8042_irq);
-    route(1, VEC_KBD);
-    route(12, VEC_MOUSE);
+    isa_irq_route(1, VEC_KBD);
+    isa_irq_route(12, VEC_MOUSE);
     kprintf("input: PS/2 keyboard, %s mouse\n", vmmouse ? "absolute (vmmouse)" : "PS/2");
 }

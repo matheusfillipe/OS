@@ -1,3 +1,4 @@
+#include "isa.h"
 #include <asm/io.h>
 #include <kernel/arch.h>
 #include <kernel/drivers.h>
@@ -8,20 +9,22 @@
 
 static bool present;
 
-bool serial_init(void) {
-    outb(COM1 + 1, 0x00); /* interrupts off */
-    outb(COM1 + 3, 0x80); /* DLAB on */
-    outb(COM1 + 0, 0x01); /* divisor 1 = 115200 baud */
-    outb(COM1 + 1, 0x00);
-    outb(COM1 + 3, 0x03); /* 8N1 */
-    outb(COM1 + 2, 0xc7); /* FIFO on, cleared, 14-byte threshold */
-    outb(COM1 + 4, 0x1e); /* loopback mode for the self-test */
-    outb(COM1 + 0, 0xae);
-    if (inb(COM1 + 0) != 0xae)
-        return present = false;
-    outb(COM1 + 4, 0x0f); /* normal operation */
-    return present = true;
+static bool uart_init(uint16_t port, uint8_t loopback_byte) {
+    outb(port + 1, 0x00); /* interrupts off */
+    outb(port + 3, 0x80); /* DLAB on */
+    outb(port + 0, 0x01); /* divisor 1 = 115200 baud */
+    outb(port + 1, 0x00);
+    outb(port + 3, 0x03); /* 8N1 */
+    outb(port + 2, 0xc7); /* FIFO on, cleared, 14-byte threshold */
+    outb(port + 4, 0x1e); /* loopback mode for the self-test */
+    outb(port + 0, loopback_byte);
+    if (inb(port + 0) != loopback_byte)
+        return false;
+    outb(port + 4, 0x0f); /* normal operation */
+    return true;
 }
+
+bool serial_init(void) { return present = uart_init(COM1, 0xae); }
 
 static void serial_putc(char c) {
     for (int spins = 0; spins < 100000 && !(inb(COM1 + 5) & 0x20); spins++)
@@ -51,9 +54,7 @@ static void com1_irq(struct regs *r) {
 void serial_rx_irq_init(void (*rx)(char c)) {
     rx_callback = rx;
     idt_set_handler(VEC_COM1, com1_irq);
-    bool level, active_low;
-    uint32_t gsi = irq_to_gsi(4, &level, &active_low);
-    ioapic_route(gsi, VEC_COM1, cpus[0]->arch.lapic_id, level, active_low);
+    isa_irq_route(4, VEC_COM1);
     outb(COM1 + 1, 0x01); /* interrupt on received data */
 }
 
@@ -66,24 +67,11 @@ void serial_rx_irq_init(void (*rx)(char c)) {
 
 static bool com2_present;
 
-bool com2_init(void) {
-    outb(COM2 + 1, 0x00);
-    outb(COM2 + 3, 0x80);
-    outb(COM2 + 0, 0x01);
-    outb(COM2 + 1, 0x00);
-    outb(COM2 + 3, 0x03);
-    outb(COM2 + 2, 0xc7);
-    outb(COM2 + 4, 0x1e);
-    outb(COM2 + 0, 0x5a);
-    if (inb(COM2 + 0) != 0x5a)
-        return com2_present = false;
-    outb(COM2 + 4, 0x0f);
-    /* Whatever is already waiting (a clipboard sent while booting) is left
-     * for the reader: draining it here in a tight loop is exactly the
-     * pattern that, under some hypervisors (Windows' WHPX), keeps QEMU's
-     * own thread from running and freezes its window. */
-    return com2_present = true;
-}
+/* Whatever is already waiting (a clipboard sent while booting) is left
+ * for the reader: draining it here in a tight loop is exactly the
+ * pattern that, under some hypervisors (Windows' WHPX), keeps QEMU's
+ * own thread from running and freezes its window. */
+bool com2_init(void) { return com2_present = uart_init(COM2, 0x5a); }
 
 /* Non-blocking: returns what has arrived (0 if nothing). Every port access
  * is a VM exit, so it reads only what is ready, a FIFO's worth at a time,

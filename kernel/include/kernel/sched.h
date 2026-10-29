@@ -2,6 +2,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define HZ 250
+extern volatile uint64_t global_ticks;
+
 enum thread_state { THREAD_READY, THREAD_RUNNING, THREAD_SLEEPING, THREAD_BLOCKED, THREAD_DEAD };
 
 struct thread {

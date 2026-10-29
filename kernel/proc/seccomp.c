@@ -319,7 +319,7 @@ SYSCALL(seccomp) {
 }
 
 /* Before system call `nr` runs. Returns true to run it; otherwise `*ret`
- * is what the caller sees in rax (a SIGSYS may be on its way). */
+ * is the return value the caller sees (a SIGSYS may be on its way). */
 bool seccomp_check(struct regs *r, uint64_t nr, int64_t *ret) {
     struct thread *t = thread_current();
     struct process *p = t->user->proc;
@@ -346,7 +346,7 @@ bool seccomp_check(struct regs *r, uint64_t nr, int64_t *ret) {
         *ret = -(int64_t)(data > 4095 ? 4095 : data);
         return false;
     case SECCOMP_RET_TRAP: {
-        /* The handler sees the call as it was made: rax holds its number,
+        /* The handler sees the call as it was made: the syscall number is intact,
          * and siginfo says which call, from where. */
         struct user_thread *ut = t->user;
         ut->sigsys_nr = (int)nr;

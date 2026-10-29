@@ -1,6 +1,5 @@
 #include <kernel/arch.h>
 #include <kernel/blkdev.h>
-#include <kernel/cpu.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
 #include <kernel/net.h>
@@ -350,7 +349,6 @@ enum { CT_USER, CT_SYS, CT_IDLE, CT_N };
 static uint64_t cpu_time[MAX_CPUS][CT_N];
 static uint64_t busy_ticks;           /* non-idle ticks over all CPUs, for loadavg */
 static uint64_t loadavg_fixed[3];     /* 11-bit fixed point, as Linux */
-static uint64_t tsc0, ns0;            /* for "cpu MHz" */
 
 void proc_account_tick(struct regs *r) {
     struct cpu *c = this_cpu();
@@ -1325,15 +1323,9 @@ static int link_mounts(struct snode *n, char *buf, size_t size) {
 
 /* ---- system-wide files ---- */
 
-static uint64_t cpu_khz(void) {
-    uint64_t ns = time_monotonic_ns() - ns0;
-    uint64_t tsc = arch_counter() - tsc0;
-    return ns > 1000000 ? tsc / (ns / 1000000) : 0; /* TSC ticks per ms = kHz */
-}
-
 static int show_cpuinfo(struct snode *n, struct sbuf *b) {
     (void)n;
-    arch_cpuinfo(b, cpu_khz());
+    arch_cpuinfo(b);
     return 0;
 }
 
@@ -1639,8 +1631,7 @@ struct vnode *procfs_new_root(void);
 struct vnode *procfs_new_root(void) { return synth_root(&proc_root); }
 
 void procfs_init(void) {
-    tsc0 = arch_counter();
-    ns0 = time_monotonic_ns();
+    arch_cpuinfo_init();
     make_uuid(boot_id);
     struct vnode *root = synth_root(&proc_root);
     KASSERT(root);

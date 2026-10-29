@@ -1,5 +1,4 @@
 #include <kernel/arch.h>
-#include <kernel/cpu.h>
 #include <kernel/drivers.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
@@ -288,7 +287,7 @@ static int64_t zero_read(struct vnode *v, struct file *f, void *buf, size_t len,
     return (int64_t)len;
 }
 
-/* xorshift64* seeded from RDTSC (and RDRAND when present). Not a CSPRNG
+/* xorshift64* seeded from the arch cycle counter (and a hardware RNG when present). Not a CSPRNG
  * yet: the entropy pool arrives with the crypto work for TLS. */
 static uint64_t rng_state;
 static uint64_t rng_next(void) {

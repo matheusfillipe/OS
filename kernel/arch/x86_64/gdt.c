@@ -1,9 +1,13 @@
+#include <asm/msr.h>
 #include <kernel/arch.h>
-#include <kernel/cpu.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
 
 #define DF_STACK_SIZE 16384
+
+_Static_assert(offsetof(struct cpu, arch.self) == 0, "this_cpu() reads self at gs:0");
+_Static_assert(offsetof(struct cpu, arch.kernel_rsp) == 8, "syscall.S reads kernel_rsp at gs:8");
+_Static_assert(offsetof(struct cpu, arch.user_rsp) == 16, "syscall.S uses user_rsp at gs:16");
 
 struct gdtr {
     uint16_t limit;

@@ -1,4 +1,3 @@
-#include <kernel/arch.h>
 #include <kernel/input.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>

@@ -1,9 +1,10 @@
 #include <asm/io.h>
+#include <asm/msr.h>
 #include <kernel/arch.h>
 #include <kernel/boot.h>
-#include <kernel/cpu.h>
 #include <kernel/lib.h>
 #include <kernel/mm.h>
+#include <kernel/sched.h>
 #include <kernel/spinlock.h>
 
 /* Local APIC (x2APIC when the CPU has it, xAPIC MMIO otherwise), I/O APIC,
@@ -55,7 +56,6 @@ static int ioapic_count;
 static struct iso isos[16];
 static int iso_count;
 static uint32_t ticks_per_period; /* APIC timer count per 1/HZ s, divider 16 */
-volatile uint64_t global_ticks;
 
 static uint32_t lapic_read(uint32_t reg) {
     return x2apic ? (uint32_t)rdmsr(0x800 + (reg >> 4)) : lapic_mmio[reg / 4];

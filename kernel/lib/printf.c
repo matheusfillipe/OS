@@ -1,4 +1,3 @@
-#include <kernel/cpu.h>
 #include <kernel/drivers.h>
 #include <kernel/lib.h>
 #include <kernel/platform.h>

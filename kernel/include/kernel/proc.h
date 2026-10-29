@@ -216,7 +216,7 @@ struct user_thread {
     int tid;
     volatile bool killed; /* must exit at the next return to user (group exit, execve) */
     bool exiting;         /* past the point of no return in thread exit: no mm */
-    void *fpu;     /* xsave area */
+    void *fpu;     /* arch floating-point state */
     uint64_t tls;
     uint64_t clear_child_tid;
     uint64_t sigmask;
@@ -312,6 +312,7 @@ void fpu_save(void *area);
 void fpu_restore(void *area);
 void fpu_copy(void *dst, const void *src);
 void fpu_reset(void *area);
+void fpu_capture_clean_state(void);
 
 /* System call entry */
 void syscall_init_cpu(void);

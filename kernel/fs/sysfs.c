@@ -1,6 +1,5 @@
 #include <kernel/arch.h>
 #include <kernel/blkdev.h>
-#include <kernel/cpu.h>
 #include <kernel/lib.h>
 #include <kernel/vfs.h>
 #include <linux/abi.h>
