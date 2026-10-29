@@ -86,42 +86,17 @@ static int show_all_mask(struct snode *n, struct sbuf *b) {
 
 static int show_freq(struct snode *n, struct sbuf *b) {
     (void)n;
-    /* CPUID leaf 0x16 has the base frequency in MHz where it is reported. */
-    uint32_t a, bx, c, d, max;
-    cpuid(0, 0, &max, &bx, &c, &d);
-    uint32_t mhz = 0;
-    if (max >= 0x16) {
-        cpuid(0x16, 0, &a, &bx, &c, &d);
-        mhz = a & 0xffff;
-    }
+    uint32_t mhz = arch_base_mhz();
     sb_printf(b, "%u\n", (mhz ? mhz : 2000) * 1000);
     return 0;
 }
 
-/* ---- caches (CPUID leaf 4 on Intel, 0x8000001D on AMD; same layout) ---- */
-
-static bool cache_leaf(int index, uint32_t r[4]) {
-    uint32_t max, extmax, bx, c, d;
-    cpuid(0, 0, &max, &bx, &c, &d);
-    if (max >= 4) {
-        cpuid(4, (uint32_t)index, &r[0], &r[1], &r[2], &r[3]);
-        if (r[0] & 0x1f)
-            return true;
-        if (index > 0)
-            return false;
-    }
-    cpuid(0x80000000, 0, &extmax, &bx, &c, &d);
-    if (extmax >= 0x8000001d) {
-        cpuid(0x8000001d, (uint32_t)index, &r[0], &r[1], &r[2], &r[3]);
-        return (r[0] & 0x1f) != 0;
-    }
-    return false;
-}
+/* ---- caches ---- */
 
 static int cache_nth(struct snode *dir, uint64_t i, char *name, size_t size, int *id) {
     (void)dir;
-    uint32_t r[4];
-    if (i > 16 || !cache_leaf((int)i, r))
+    struct arch_cache ci;
+    if (i > 16 || !arch_cache_info((int)i, &ci))
         return 0;
     ksnprintf(name, size, "index%lu", i);
     *id = (int)i;
@@ -138,8 +113,8 @@ static int cache_find(struct snode *dir, const char *name, int *id) {
             return -ENOENT;
         i = i * 10 + (name[6] - '0');
     }
-    uint32_t r[4];
-    if (!cache_leaf(i, r))
+    struct arch_cache ci;
+    if (!arch_cache_info(i, &ci))
         return -ENOENT;
     *id = i;
     return 0;
@@ -148,17 +123,16 @@ static int cache_find(struct snode *dir, const char *name, int *id) {
 enum cache_field { CF_LEVEL, CF_TYPE, CF_SIZE, CF_LINE, CF_WAYS, CF_SETS, CF_PART, CF_SHARED, CF_SHARED_MAP };
 
 static int show_cache(struct snode *n, struct sbuf *b, enum cache_field f) {
-    uint32_t r[4];
-    if (!cache_leaf(n->id[1], r))
+    struct arch_cache ci;
+    if (!arch_cache_info(n->id[1], &ci))
         return -ENOENT;
-    uint32_t ways = (r[1] >> 22) + 1, parts = ((r[1] >> 12) & 0x3ff) + 1, line = (r[1] & 0xfff) + 1,
-             sets = r[2] + 1, sharing = ((r[0] >> 14) & 0xfff) + 1;
+    uint32_t ways = ci.ways, parts = ci.parts, line = ci.line, sets = ci.sets, sharing = ci.sharing;
     switch (f) {
     case CF_LEVEL:
-        sb_printf(b, "%u\n", (r[0] >> 5) & 7);
+        sb_printf(b, "%u\n", ci.level);
         break;
     case CF_TYPE: {
-        uint32_t t = r[0] & 0x1f;
+        uint32_t t = ci.type;
         sb_printf(b, "%s\n", t == 1 ? "Data" : t == 2 ? "Instruction" : "Unified");
         break;
     }
@@ -209,11 +183,10 @@ CACHE_SHOW(shared, CF_SHARED)
 CACHE_SHOW(shared_map, CF_SHARED_MAP)
 
 static int show_cache_id(struct snode *n, struct sbuf *b) {
-    uint32_t r[4];
-    if (!cache_leaf(n->id[1], r))
+    struct arch_cache ci;
+    if (!arch_cache_info(n->id[1], &ci))
         return -ENOENT;
-    uint32_t sharing = ((r[0] >> 14) & 0xfff) + 1;
-    uint32_t group = sharing >= cpu_count ? cpu_count : sharing;
+    uint32_t group = ci.sharing >= cpu_count ? cpu_count : ci.sharing;
     sb_printf(b, "%u\n", (uint32_t)n->id[0] / (group ? group : 1));
     return 0;
 }

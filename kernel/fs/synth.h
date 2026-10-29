@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <kernel/sbuf.h>
 #include <kernel/vfs.h>
 
 /* Synthetic file systems (/proc, /sys): a tree described by static tables,
@@ -9,18 +10,6 @@
  * generated when read. Nothing is stored: a node is its table entry plus
  * the ids taken from the path (/proc/<pid>/task/<tid>/fd/<fd>, or a CPU and
  * cache index under /sys). */
-
-/* A growable text buffer for generated file contents. */
-struct sbuf {
-    char *buf;
-    size_t len, cap;
-    bool oom;
-};
-void sb_put(struct sbuf *b, const char *s, size_t n);
-void sb_printf(struct sbuf *b, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
-/* Pads the current line with spaces up to column `col` (no %-Ns in ksnprintf). */
-void sb_pad(struct sbuf *b, size_t col);
-void sb_free(struct sbuf *b);
 
 struct snode;
 

@@ -51,5 +51,17 @@ uint64_t arch_hwcap(void);
 
 void arch_send_resched(struct cpu *c);
 
+struct sbuf;
+/* Writes one /proc/cpuinfo block per CPU; khz is the measured counter rate. */
+void arch_cpuinfo(struct sbuf *b, uint64_t khz);
+/* Base frequency in MHz, 0 when the CPU does not report it. */
+uint32_t arch_base_mhz(void);
+
+/* One cache as sysfs reports it. type is 1 data, 2 instruction, otherwise unified. */
+struct arch_cache {
+    uint32_t level, type, line, ways, parts, sets, sharing;
+};
+bool arch_cache_info(int index, struct arch_cache *ci);
+
 void arch_mmu_init(void);
 void arch_page_fault_init(void);
