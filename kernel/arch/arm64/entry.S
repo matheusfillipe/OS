@@ -81,6 +81,48 @@ exception_return:
     add sp, sp, #FRAME
     eret
 
+/* void return_to_user(struct regs *frame)
+ * Enters user mode from a frame at the top of the current thread's stack, so
+ * SP_EL1 is back at that top for the next exception from EL0. */
+.global return_to_user
+return_to_user:
+    mov sp, x0
+    b exception_return
+
+/* void fpu_save(void *area), void fpu_restore(void *area)
+ * Copy V0-V31, FPSR and FPCR to and from a struct fpsimd_context. */
+.global fpu_save
+fpu_save:
+    mrs x2, fpsr
+    mrs x3, fpcr
+    stp w2, w3, [x0, #8]
+    add x1, x0, #16
+    st1 {v0.2d-v3.2d}, [x1], #64
+    st1 {v4.2d-v7.2d}, [x1], #64
+    st1 {v8.2d-v11.2d}, [x1], #64
+    st1 {v12.2d-v15.2d}, [x1], #64
+    st1 {v16.2d-v19.2d}, [x1], #64
+    st1 {v20.2d-v23.2d}, [x1], #64
+    st1 {v24.2d-v27.2d}, [x1], #64
+    st1 {v28.2d-v31.2d}, [x1]
+    ret
+
+.global fpu_restore
+fpu_restore:
+    ldp w2, w3, [x0, #8]
+    msr fpsr, x2
+    msr fpcr, x3
+    add x1, x0, #16
+    ld1 {v0.2d-v3.2d}, [x1], #64
+    ld1 {v4.2d-v7.2d}, [x1], #64
+    ld1 {v8.2d-v11.2d}, [x1], #64
+    ld1 {v12.2d-v15.2d}, [x1], #64
+    ld1 {v16.2d-v19.2d}, [x1], #64
+    ld1 {v20.2d-v23.2d}, [x1], #64
+    ld1 {v24.2d-v27.2d}, [x1], #64
+    ld1 {v28.2d-v31.2d}, [x1]
+    ret
+
 /* void switch_context(uint64_t *save_sp, uint64_t new_sp)
  * Saves callee-saved registers on the current stack, stores the stack pointer
  * into *save_sp, then resumes the thread whose stack is new_sp. */

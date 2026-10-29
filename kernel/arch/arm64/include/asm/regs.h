@@ -9,6 +9,14 @@ struct regs {
     uint64_t esr, far;
 };
 
+/* A thread's FP/SIMD registers, kept in the layout of the Linux signal
+ * frame's fpsimd_context record. */
+struct fpsimd_context {
+    uint32_t magic, size;
+    uint32_t fpsr, fpcr;
+    uint64_t vregs[64];
+};
+
 static inline uint64_t regs_ip(const struct regs *r) { return r->pc; }
 static inline void regs_set_ip(struct regs *r, uint64_t ip) { r->pc = ip; }
 static inline uint64_t regs_sp(const struct regs *r) { return r->sp; }

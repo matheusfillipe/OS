@@ -183,6 +183,7 @@
 #define SIG_DFL 0
 #define SIG_IGN 1
 #define SA_SIGINFO 0x00000004
+#define SA_RESTORER 0x04000000
 #define SA_ONSTACK 0x08000000
 #define SA_RESTART 0x10000000
 #define SA_NODEFER 0x40000000
@@ -194,6 +195,13 @@
 struct siginfo {
     int32_t si_signo, si_errno, si_code, pad;
     uint8_t rest[112];
+};
+
+struct linux_sigaction {
+    uint64_t handler;
+    uint64_t flags;
+    uint64_t restorer;
+    uint64_t mask;
 };
 
 /* ioctl */

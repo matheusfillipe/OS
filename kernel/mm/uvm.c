@@ -115,9 +115,13 @@ static bool break_cow(struct mm *mm, struct vma *v, uint64_t va, uint64_t *pte) 
         if (!p)
             return false;
         memcpy(phys_to_virt(p), phys_to_virt(old), PAGE_SIZE);
-        *pte = pte_make(p, pte_flags_for(v->prot));
+        /* We take the old entry out of every TLB before writing the new one,
+         * since arm64 forbids changing a live entry's output address
+         * (break-before-make). */
+        *pte = 0;
         arch_tlb_flush_page(va);
         tlb_shootdown(mm); /* other threads must stop reading the old page */
+        *pte = pte_make(p, pte_flags_for(v->prot));
         page_unref(old);   /* the other side keeps it */
     } else {
         *pte = pte_make(old, pte_flags_for(v->prot)); /* the last one: just ours again */

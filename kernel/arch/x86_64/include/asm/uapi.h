@@ -7,8 +7,6 @@
 #define O_DIRECTORY 0200000
 #define O_NOFOLLOW 0400000
 
-#define SA_RESTORER 0x04000000
-
 /* clone's argument order: flags, newsp, parent_tid, child_tid, tls. */
 #define CLONE_ARGS(a1, a2, a3, a4, a5) (a1), (a2), (a3), (a4), (a5)
 
@@ -16,13 +14,6 @@ struct linux_epoll_event {
     uint32_t events;
     uint64_t data;
 } __attribute__((packed));
-
-struct linux_sigaction {
-    uint64_t handler;
-    uint64_t flags;
-    uint64_t restorer;
-    uint64_t mask;
-};
 
 struct linux_stat {
     uint64_t st_dev;

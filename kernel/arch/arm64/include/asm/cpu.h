@@ -3,13 +3,15 @@
 
 /* arm64 part of struct cpu. TPIDR_EL1 holds the struct cpu pointer itself. */
 struct arch_cpu {
-    uint64_t kernel_sp; /* stack top for exceptions taken from EL0 */
     uint64_t mpidr;
     volatile uint8_t *gicr; /* this CPU's GIC redistributor */
     uint32_t irq_intid;     /* interrupt being handled, for irq_eoi */
 };
 
 struct cpu;
+
+/* Every CPU: per-CPU pointer, exception vectors, EL0 access and FP/SIMD. */
+void cpu_init(struct cpu *c);
 
 static inline struct cpu *this_cpu(void) {
     struct cpu *c;

@@ -103,6 +103,11 @@ static void sync_exception(struct regs *r) {
 
 void exception_dispatch(struct regs *r, uint64_t vector);
 void exception_dispatch(struct regs *r, uint64_t vector) {
+    /* User code sets TPIDR_EL0 itself, so we read it back into the thread's
+     * tls, which the scheduler and clone load. */
+    struct thread *t = this_cpu()->current;
+    if (regs_user_mode(r) && t->user)
+        __asm__ volatile("mrs %0, tpidr_el0" : "=r"(t->user->tls));
     switch (vector) {
     case VECTOR_SYNC_EL1:
     case VECTOR_SYNC_EL0:

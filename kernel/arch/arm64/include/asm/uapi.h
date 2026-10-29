@@ -15,12 +15,6 @@ struct linux_epoll_event {
     uint64_t data;
 };
 
-struct linux_sigaction {
-    uint64_t handler;
-    uint64_t flags;
-    uint64_t mask;
-};
-
 struct linux_stat {
     uint64_t st_dev;
     uint64_t st_ino;
